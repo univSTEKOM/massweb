@@ -196,14 +196,14 @@ export const contentApi = {
         {},
         { timeout: 300000 } // 5 minutes for large content generation
     ),
-    getContents: (projectId: string, page: number = 1, limit: number = 20, status?: string) =>
+    getContents: (projectId: string, page: number = 1, limit: number = 20, status?: string, search?: string) =>
         api.get<{
             contents: GeneratedContent[];
             total: number;
             page: number;
             totalPages: number;
         }>(`/content-generator/projects/${projectId}/contents`, {
-            params: { page, limit, status },
+            params: { page, limit, status, search },
         }),
     getById: (id: string) => api.get<GeneratedContent>(`/content-generator/contents/${id}`),
     update: (id: string, data: Partial<GeneratedContent>) => api.put<GeneratedContent>(`/content-generator/contents/${id}`, data),

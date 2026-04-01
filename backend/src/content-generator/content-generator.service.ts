@@ -161,18 +161,24 @@ export class ContentGeneratorService {
         page: number = 1,
         limit: number = 20,
         status?: PublishStatus,
+        search?: string,
     ): Promise<{ contents: GeneratedContent[]; total: number; page: number; totalPages: number }> {
-        const where: any = { projectId };
+        const query = this.contentRepository.createQueryBuilder('content')
+            .where('content.projectId = :projectId', { projectId });
+
         if (status) {
-            where.publishStatus = status;
+            query.andWhere('content.publishStatus = :status', { status });
         }
 
-        const [contents, total] = await this.contentRepository.findAndCount({
-            where,
-            order: { createdAt: 'DESC' },
-            take: limit,
-            skip: (page - 1) * limit,
-        });
+        if (search && search.trim()) {
+            query.andWhere('content.title LIKE :search', { search: `%${search.trim()}%` });
+        }
+
+        const [contents, total] = await query
+            .orderBy('content.createdAt', 'DESC')
+            .take(limit)
+            .skip((page - 1) * limit)
+            .getManyAndCount();
 
         return {
             contents,

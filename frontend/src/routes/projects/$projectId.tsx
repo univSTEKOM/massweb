@@ -2,8 +2,8 @@ import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { projectsApi, contentApi, type GeneratedContent } from '../../lib/api'
 import { Button, Card, Spinner } from '@heroui/react'
-import { ArrowLeft, Sparkles, Eye, Trash2, CheckSquare, Square, RotateCcw, Book } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowLeft, Sparkles, Eye, Trash2, CheckSquare, Square, RotateCcw, Book, Search } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ExportMenu } from '../../components/ExportMenu'
 import { PublishJobControl } from '../../components/PublishJobControl'
@@ -24,8 +24,18 @@ function ProjectDetailPage() {
     const queryClient = useQueryClient()
     const [page, setPage] = useState(1)
     const [statusFilter, setStatusFilter] = useState<string>('all')
+    const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
     const [bulkPublishDelay, setBulkPublishDelay] = useState(3)
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery)
+            setPage(1)
+        }, 500)
+        return () => clearTimeout(timer)
+    }, [searchQuery])
 
     const { data: project, isLoading: projectLoading } = useQuery({
         queryKey: ['project', projectId],
@@ -44,13 +54,14 @@ function ProjectDetailPage() {
     })
 
     const { data: contentsData, isLoading: contentsLoading } = useQuery({
-        queryKey: ['contents', projectId, page, statusFilter],
+        queryKey: ['contents', projectId, page, statusFilter, debouncedSearch],
         queryFn: async () => {
             const response = await contentApi.getContents(
                 projectId,
                 page,
                 20,
-                statusFilter === 'all' ? undefined : statusFilter
+                statusFilter === 'all' ? undefined : statusFilter,
+                debouncedSearch || undefined
             )
             return response.data
         },
@@ -251,7 +262,7 @@ function ProjectDetailPage() {
 
             {/* Content List */}
             <Card className="p-6">
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <div>
                         <h2 className="text-2xl font-bold">Generated Content</h2>
                         {selectedItems.size > 0 && (
@@ -260,11 +271,24 @@ function ProjectDetailPage() {
                             </p>
                         )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                        <div className="relative flex-1 sm:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Cari berdasarkan judul..."
+                                className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
                         <select
                             className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
+                            onChange={(e) => {
+                                setStatusFilter(e.target.value)
+                                setPage(1)
+                            }}
                         >
                             <option value="all">All</option>
                             <option value="pending">Pending</option>

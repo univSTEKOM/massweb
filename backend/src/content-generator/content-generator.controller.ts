@@ -43,12 +43,14 @@ export class ContentGeneratorController {
         @Query('page') page: number = 1,
         @Query('limit') limit: number = 20,
         @Query('status') status?: string,
+        @Query('search') search?: string,
     ) {
         return await this.contentGeneratorService.getGeneratedContents(
             projectId,
             Number(page),
             Number(limit),
             status as any,
+            search,
         );
     }
 
