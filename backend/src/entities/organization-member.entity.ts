@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { User } from './user.entity';
 import { Organization } from './organization.entity';
 
@@ -7,6 +7,11 @@ export enum OrganizationRole {
     ORG_MEMBER = 'org_member',
 }
 
+// (userId, organizationId): membership lookups; its leading column also serves
+// userId-only queries. organizationId indexed for per-org member counts.
+// Kept non-unique so index creation can't fail on any pre-existing duplicate rows.
+@Index('idx_orgmember_user_org', ['userId', 'organizationId'])
+@Index('idx_orgmember_org', ['organizationId'])
 @Entity('organization_members')
 export class OrganizationMember {
     @PrimaryGeneratedColumn('uuid')

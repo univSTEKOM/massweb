@@ -39,23 +39,36 @@ export class AdminOrganizationsService {
             order: { createdAt: 'DESC' },
         });
 
-        // Get counts for each organization
-        const orgsWithCounts = await Promise.all(
-            organizations.map(async (org) => {
-                const memberCount = await this.orgMemberRepository.count({
-                    where: { organizationId: org.id },
-                });
-                const projectCount = await this.projectRepository.count({
-                    where: { organizationId: org.id },
-                });
+        // Aggregate member/project counts in two grouped queries instead of two per org (avoids N+1).
+        const orgIds = organizations.map((org) => org.id);
+        const memberCountMap = new Map<string, number>();
+        const projectCountMap = new Map<string, number>();
 
-                return {
-                    ...org,
-                    memberCount,
-                    projectCount,
-                };
-            })
-        );
+        if (orgIds.length > 0) {
+            const memberCounts = await this.orgMemberRepository
+                .createQueryBuilder('member')
+                .select('member.organizationId', 'organizationId')
+                .addSelect('COUNT(*)', 'count')
+                .where('member.organizationId IN (:...orgIds)', { orgIds })
+                .groupBy('member.organizationId')
+                .getRawMany();
+            memberCounts.forEach((r) => memberCountMap.set(r.organizationId, Number(r.count)));
+
+            const projectCounts = await this.projectRepository
+                .createQueryBuilder('project')
+                .select('project.organizationId', 'organizationId')
+                .addSelect('COUNT(*)', 'count')
+                .where('project.organizationId IN (:...orgIds)', { orgIds })
+                .groupBy('project.organizationId')
+                .getRawMany();
+            projectCounts.forEach((r) => projectCountMap.set(r.organizationId, Number(r.count)));
+        }
+
+        const orgsWithCounts = organizations.map((org) => ({
+            ...org,
+            memberCount: memberCountMap.get(org.id) ?? 0,
+            projectCount: projectCountMap.get(org.id) ?? 0,
+        }));
 
         return {
             data: orgsWithCounts,

@@ -40,24 +40,30 @@ export class AdminUsersService {
             order: { createdAt: 'DESC' },
         });
 
-        // Get organization count for each user
-        const usersWithCounts = await Promise.all(
-            users.map(async (user) => {
-                const orgCount = await this.orgMemberRepository.count({
-                    where: { userId: user.id },
-                });
+        // Aggregate membership counts in one grouped query instead of one per user (avoids N+1).
+        const userIds = users.map((user) => user.id);
+        const orgCountMap = new Map<string, number>();
 
-                return {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name,
-                    isSuperAdmin: user.isSuperAdmin,
-                    isActive: user.isActive,
-                    createdAt: user.createdAt,
-                    organizationCount: orgCount,
-                };
-            })
-        );
+        if (userIds.length > 0) {
+            const orgCounts = await this.orgMemberRepository
+                .createQueryBuilder('member')
+                .select('member.userId', 'userId')
+                .addSelect('COUNT(*)', 'count')
+                .where('member.userId IN (:...userIds)', { userIds })
+                .groupBy('member.userId')
+                .getRawMany();
+            orgCounts.forEach((r) => orgCountMap.set(r.userId, Number(r.count)));
+        }
+
+        const usersWithCounts = users.map((user) => ({
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            isSuperAdmin: user.isSuperAdmin,
+            isActive: user.isActive,
+            createdAt: user.createdAt,
+            organizationCount: orgCountMap.get(user.id) ?? 0,
+        }));
 
         return {
             data: usersWithCounts,

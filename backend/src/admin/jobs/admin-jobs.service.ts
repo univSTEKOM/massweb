@@ -39,33 +39,35 @@ export class AdminJobsService {
             order: { createdAt: 'DESC' },
         });
 
-        // Get project and organization info for each job
-        const jobsWithInfo = await Promise.all(
-            jobs.map(async (job) => {
-                const project = await this.projectRepository.findOne({
-                    where: { id: job.projectId },
-                });
+        // Batch-load related projects/organizations instead of querying per job (avoids N+1).
+        const projectIds = [...new Set(jobs.map((job) => job.projectId).filter(Boolean))];
+        const projects = projectIds.length
+            ? await this.projectRepository.find({ where: { id: In(projectIds) } })
+            : [];
+        const projectMap = new Map(projects.map((p) => [p.id, p]));
 
-                let organization: Organization | null = null;
-                if (project) {
-                    organization = await this.organizationRepository.findOne({
-                        where: { id: project.organizationId },
-                    });
-                }
+        const orgIds = [...new Set(projects.map((p) => p.organizationId).filter(Boolean))];
+        const organizations = orgIds.length
+            ? await this.organizationRepository.find({ where: { id: In(orgIds) } })
+            : [];
+        const orgMap = new Map(organizations.map((o) => [o.id, o]));
 
-                return {
-                    ...job,
-                    project: project ? {
-                        id: project.id,
-                        name: project.name,
-                    } : null,
-                    organization: organization ? {
-                        id: organization.id,
-                        name: organization.name,
-                    } : null,
-                };
-            })
-        );
+        const jobsWithInfo = jobs.map((job) => {
+            const project = projectMap.get(job.projectId) ?? null;
+            const organization = project ? orgMap.get(project.organizationId) ?? null : null;
+
+            return {
+                ...job,
+                project: project ? {
+                    id: project.id,
+                    name: project.name,
+                } : null,
+                organization: organization ? {
+                    id: organization.id,
+                    name: organization.name,
+                } : null,
+            };
+        });
 
         return {
             data: jobsWithInfo,

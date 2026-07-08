@@ -1,7 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, ManyToMany, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, ManyToMany, JoinColumn, Index } from 'typeorm';
 import { Organization } from './organization.entity';
 import { Project } from './project.entity';
 
+@Index('idx_category_org', ['organizationId'])
 @Entity('categories')
 export class Category {
     @PrimaryGeneratedColumn('uuid')

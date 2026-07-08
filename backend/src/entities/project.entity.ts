@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, ManyToOne, ManyToMany, JoinColumn, JoinTable } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, ManyToOne, ManyToMany, JoinColumn, JoinTable, Index } from 'typeorm';
 import { CsvColumn } from './csv-column.entity';
 import { CsvRow } from './csv-row.entity';
 import { GeneratedContent } from './generated-content.entity';
@@ -7,6 +7,8 @@ import { Organization } from './organization.entity';
 import { User } from './user.entity';
 import { Category } from './category.entity';
 
+// Projects are listed/counted by organizationId, ordered by createdAt.
+@Index('idx_project_org_created', ['organizationId', 'createdAt'])
 @Entity('projects')
 export class Project {
     @PrimaryGeneratedColumn('uuid')

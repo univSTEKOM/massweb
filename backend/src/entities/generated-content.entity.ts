@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Project } from './project.entity';
 
 export enum PublishStatus {
@@ -7,6 +7,13 @@ export enum PublishStatus {
     FAILED = 'failed',
 }
 
+// Indexes for the hot list/count/publish queries on this (potentially huge) table.
+// (projectId, publishStatus, createdAt): filter by project + status, ordered by createdAt.
+// (projectId, createdAt): list a project's content ordered by createdAt (no status filter).
+// slug: public lookup by slug.
+@Index('idx_gc_project_status_created', ['projectId', 'publishStatus', 'createdAt'])
+@Index('idx_gc_project_created', ['projectId', 'createdAt'])
+@Index('idx_gc_slug', ['slug'])
 @Entity('generated_contents')
 export class GeneratedContent {
     @PrimaryGeneratedColumn('uuid')

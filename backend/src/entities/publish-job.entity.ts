@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Project } from './project.entity';
 
 export enum JobStatus {
@@ -10,6 +10,10 @@ export enum JobStatus {
     CANCELLED = 'cancelled',
 }
 
+// (status, createdAt): the 30s scheduler polls PENDING jobs ordered by createdAt.
+// (projectId, status): per-project active-job / status lookups.
+@Index('idx_job_status_created', ['status', 'createdAt'])
+@Index('idx_job_project_status', ['projectId', 'status'])
 @Entity('publish_jobs')
 export class PublishJob {
     @PrimaryGeneratedColumn('uuid')

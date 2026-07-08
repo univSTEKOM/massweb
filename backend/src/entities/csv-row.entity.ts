@@ -1,6 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { Project } from './project.entity';
 
+// Rows are fetched/counted by projectId and read in rowOrder during generation.
+@Index('idx_csvrow_project_order', ['projectId', 'rowOrder'])
 @Entity('csv_rows')
 export class CsvRow {
     @PrimaryGeneratedColumn('uuid')

@@ -47,6 +47,10 @@ export class PublishSchedulerService {
             job.totalContents = contents.length;
             await this.publishJobRepository.save(job);
 
+            // Persist job progress at most every PROGRESS_SAVE_INTERVAL items (plus the final one)
+            // instead of on every item, to avoid thousands of UPDATE queries per large job.
+            const PROGRESS_SAVE_INTERVAL = 25;
+
             // Publish each content item
             for (let i = 0; i < contents.length; i++) {
                 const content = contents[i];
@@ -56,14 +60,16 @@ export class PublishSchedulerService {
                     await this.sleep(job.delaySeconds * 1000);
                 }
 
-                // Mark as published
+                // Mark as published (targeted update, no need to re-save the whole loaded entity)
                 content.publishStatus = PublishStatus.PUBLISHED;
                 content.publishedAt = new Date();
                 await this.contentRepository.save(content);
 
-                // Update job progress
+                // Update job progress periodically (and always on the last item)
                 job.processedCount = i + 1;
-                await this.publishJobRepository.save(job);
+                if ((i + 1) % PROGRESS_SAVE_INTERVAL === 0 || i === contents.length - 1) {
+                    await this.publishJobRepository.save(job);
+                }
 
                 this.logger.log(`Published ${i + 1}/${contents.length} items for job ${job.id}`);
             }
