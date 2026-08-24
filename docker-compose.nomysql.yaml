@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: massweb-mysql
+  #   restart: unless-stopped
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpassword}
+  #     MYSQL_DATABASE: ${DB_DATABASE:-massweb}
+  #     MYSQL_USER: ${DB_USERNAME:-massweb}
+  #     MYSQL_PASSWORD: ${DB_PASSWORD:-password}
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   healthcheck:
+  #     test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: massweb-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: massweb-backend
+    restart: unless-stopped
+    environment:
+      # Database
+      DB_HOST: ${DB_HOST:-massweb}
+      DB_PORT: ${DB_PORT:-massweb}
+      DB_USERNAME: ${DB_USERNAME:-massweb}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      DB_DATABASE: ${DB_DATABASE:-massweb}
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # Application
+      PORT: 3001
+      NODE_ENV: production
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+
+      # Super Admin
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
+
+      # Registration
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-true}
+
+      # S3 Storage
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME}
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT}
+      AWS_S3_PUBLIC_URL_PREFIX: ${AWS_S3_PUBLIC_URL_PREFIX}
+
+      # CORS
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001/api}
+    container_name: massweb-frontend
+    restart: unless-stopped
+
+volumes:
+  redis_data:
