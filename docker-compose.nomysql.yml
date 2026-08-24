@@ -77,8 +77,6 @@ services:
       # CORS
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
