@@ -148,6 +148,8 @@ export class ProjectsService {
         totalContents: number;
         publishedContents: number;
         pendingContents: number;
+        draftContents: number;
+        failedContents: number;
     }> {
         // Verify project exists and user has access (lightweight query)
         const project = await this.projectRepository.findOne({
@@ -160,21 +162,31 @@ export class ProjectsService {
 
         await this.checkOrgMembership(project.organizationId, userId);
 
-        // Use COUNT queries instead of loading all content
-        const totalContents = await this.generatedContentRepository.count({
-            where: { projectId: id },
-        });
+        // Single grouped COUNT (uses the projectId/publishStatus index) instead of loading content
+        const rows: { status: string; count: string }[] = await this.generatedContentRepository
+            .createQueryBuilder('content')
+            .select('content.publishStatus', 'status')
+            .addSelect('COUNT(*)', 'count')
+            .where('content.projectId = :id', { id })
+            .groupBy('content.publishStatus')
+            .getRawMany();
 
-        const publishedContents = await this.generatedContentRepository.count({
-            where: { projectId: id, publishStatus: 'published' as any },
-        });
+        const byStatus: Record<string, number> = {};
+        for (const row of rows) {
+            byStatus[row.status] = Number(row.count) || 0;
+        }
 
-        const pendingContents = totalContents - publishedContents;
+        const publishedContents = byStatus['published'] ?? 0;
+        const pendingContents = byStatus['pending'] ?? 0;
+        const draftContents = byStatus['draft'] ?? 0;
+        const failedContents = byStatus['failed'] ?? 0;
 
         return {
-            totalContents,
+            totalContents: publishedContents + pendingContents + draftContents + failedContents,
             publishedContents,
             pendingContents,
+            draftContents,
+            failedContents,
         };
     }
 

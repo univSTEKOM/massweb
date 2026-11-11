@@ -60,24 +60,43 @@ export class PublishSchedulerService {
                     await this.sleep(job.delaySeconds * 1000);
                 }
 
-                // Mark as published (targeted update, no need to re-save the whole loaded entity)
-                content.publishStatus = PublishStatus.PUBLISHED;
-                content.publishedAt = new Date();
-                await this.contentRepository.save(content);
+                // Respect pause/cancel requested while this job is running. Checked on every
+                // item when there is a delay (cheap relative to the sleep), otherwise periodically.
+                if (job.delaySeconds > 0 || i % PROGRESS_SAVE_INTERVAL === 0) {
+                    const current = await this.publishJobRepository.findOne({
+                        where: { id: job.id },
+                        select: ['id', 'status'],
+                    });
+                    if (current && (current.status === JobStatus.PAUSED || current.status === JobStatus.CANCELLED)) {
+                        await this.publishJobRepository.update(job.id, { processedCount: i });
+                        this.logger.log(`Publish job ${job.id} ${current.status} at ${i}/${contents.length}`);
+                        return;
+                    }
+                }
 
-                // Update job progress periodically (and always on the last item)
+                // Targeted update: only publish if the item is still pending.
+                // Items moved to draft (or published manually) after the job started are skipped.
+                await this.contentRepository.update(
+                    { id: content.id, publishStatus: PublishStatus.PENDING },
+                    { publishStatus: PublishStatus.PUBLISHED, publishedAt: new Date() },
+                );
+
+                // Update job progress periodically (and always on the last item).
+                // Use update() on the progress column only so a concurrent pause/cancel is not overwritten.
                 job.processedCount = i + 1;
                 if ((i + 1) % PROGRESS_SAVE_INTERVAL === 0 || i === contents.length - 1) {
-                    await this.publishJobRepository.save(job);
+                    await this.publishJobRepository.update(job.id, { processedCount: job.processedCount });
                 }
 
                 this.logger.log(`Published ${i + 1}/${contents.length} items for job ${job.id}`);
             }
 
             // Mark job as completed
-            job.status = JobStatus.COMPLETED;
-            job.completedAt = new Date();
-            await this.publishJobRepository.save(job);
+            await this.publishJobRepository.update(job.id, {
+                status: JobStatus.COMPLETED,
+                processedCount: contents.length,
+                completedAt: new Date(),
+            });
 
             this.logger.log(`Completed publish job ${job.id} - published ${contents.length} items`);
         } catch (error) {

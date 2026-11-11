@@ -24,8 +24,8 @@ export class ContentGenerationProcessor {
 
     @Process('generate-content')
     async handleGeneration(job: Job) {
-        const { projectId } = job.data;
-        this.logger.log(`Starting content generation for project ${projectId}`);
+        const { projectId, asDraft } = job.data;
+        this.logger.log(`Starting content generation for project ${projectId}${asDraft ? ' (as draft)' : ''}`);
 
         // Fetch project WITHOUT loading csvRows relation
         const project = await this.projectRepository.findOne({
@@ -82,7 +82,7 @@ export class ContentGenerationProcessor {
                     metaDescription,
                     tags,
                     slug,
-                    publishStatus: PublishStatus.PENDING,
+                    publishStatus: asDraft ? PublishStatus.DRAFT : PublishStatus.PENDING,
                 });
 
                 contentBatch.push(generatedContent);
@@ -150,10 +150,11 @@ export class ContentPublishingProcessor {
                     await this.sleep(delaySeconds * 1000);
                 }
 
-                // Mark as published
-                content.publishStatus = PublishStatus.PUBLISHED;
-                content.publishedAt = new Date();
-                await this.contentRepository.save(content);
+                // Mark as published, only if it is still pending (it may have been drafted meanwhile)
+                await this.contentRepository.update(
+                    { id: content.id, publishStatus: PublishStatus.PENDING },
+                    { publishStatus: PublishStatus.PUBLISHED, publishedAt: new Date() },
+                );
 
                 // Update job progress
                 publishJob.processedCount = i + 1;

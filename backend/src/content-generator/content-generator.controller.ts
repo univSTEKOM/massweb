@@ -15,6 +15,7 @@ import type { Response } from 'express';
 import { ContentGeneratorService } from './content-generator.service';
 import { ExportService } from './export.service';
 import { GeneratedContent } from '../entities/generated-content.entity';
+import { BulkDeleteDto, BulkStatusDto, GenerateContentDto, ProjectBulkStatusDto } from './dto/bulk-content.dto';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 
@@ -28,13 +29,38 @@ export class ContentGeneratorController {
     ) { }
 
     @Post('projects/:projectId/generate')
-    async generateContent(@Param('projectId') projectId: string) {
-        return await this.contentGeneratorService.generateContent(projectId);
+    async generateContent(@Param('projectId') projectId: string, @Body() body: GenerateContentDto) {
+        return await this.contentGeneratorService.generateContent(projectId, !!body?.asDraft);
     }
 
     @Post('projects/:projectId/generate-sync')
-    async generateContentSync(@Param('projectId') projectId: string) {
-        return await this.contentGeneratorService.generateContentSync(projectId);
+    async generateContentSync(@Param('projectId') projectId: string, @Body() body: GenerateContentDto) {
+        return await this.contentGeneratorService.generateContentSync(projectId, !!body?.asDraft);
+    }
+
+    /**
+     * Manual status change for selected contents (draft / queue / publish now).
+     * Publishing here is immediate and separate from the auto-publish job.
+     */
+    @Post('contents/bulk-status')
+    async bulkUpdateStatus(@Body() body: BulkStatusDto) {
+        return await this.contentGeneratorService.bulkUpdateStatus(body.contentIds, body.status);
+    }
+
+    @Post('contents/bulk-delete')
+    async bulkDelete(@Body() body: BulkDeleteDto) {
+        return await this.contentGeneratorService.bulkDelete(body.contentIds);
+    }
+
+    /**
+     * Mass status change for an entire project, e.g. { from: 'pending', to: 'draft' }.
+     */
+    @Post('projects/:projectId/bulk-status')
+    async bulkUpdateProjectStatus(
+        @Param('projectId') projectId: string,
+        @Body() body: ProjectBulkStatusDto,
+    ) {
+        return await this.contentGeneratorService.bulkUpdateProjectStatus(projectId, body.from, body.to);
     }
 
     @Get('projects/:projectId/contents')

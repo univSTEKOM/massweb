@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Button, Card } from '@heroui/react'
 import { Play, Clock, Zap, Pause, RotateCcw, X } from 'lucide-react'
+import { formatNumber } from './ui'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { contentApi } from '../lib/api'
 import toast from 'react-hot-toast'
@@ -126,11 +126,23 @@ export function PublishJobControl({ projectId, totalContents, pendingContents }:
 
     const handleStart = () => {
         if (pendingContents === 0) {
-            toast.error('No pending content to publish')
+            toast.error('No queued content to publish')
             return
         }
         startPublishMutation.mutate()
     }
+
+    const header = (title: string, desc: string, pulse = false) => (
+        <div className="flex items-start gap-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                <Zap className={`h-4 w-4 ${pulse ? 'animate-pulse' : ''}`} />
+            </span>
+            <div>
+                <h3 className="section-title">{title}</h3>
+                <p className="section-desc">{desc}</p>
+            </div>
+        </div>
+    )
 
     // Show progress if job is running
     if (jobId && jobStatus) {
@@ -142,134 +154,109 @@ export function PublishJobControl({ projectId, totalContents, pendingContents }:
         const isProcessing = jobStatus.status === 'processing' || jobStatus.status === 'pending'
 
         return (
-            <Card className="p-6">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                    <Zap className={`w-6 h-6 text-yellow-500 ${!isPaused ? 'animate-pulse' : ''}`} />
-                    {isPaused ? 'Publishing Paused' : 'Publishing Content...'}
-                </h3>
+            <div className="surface flex flex-col p-5 sm:p-6">
+                {header(
+                    isPaused ? 'Auto Publish paused' : 'Auto Publish running',
+                    `Publishing queued articles with a ${jobStatus.delaySeconds}s delay between items.`,
+                    !isPaused,
+                )}
 
-                <div className="space-y-4">
-                    <div>
-                        <div className="flex justify-between text-sm mb-2">
-                            <span className="text-gray-600 dark:text-gray-400">
-                                Progress: {jobStatus.processedCount} / {jobStatus.totalContents}
-                            </span>
-                            <span className="font-semibold text-blue-600">
-                                {Math.round(progress)}%
-                            </span>
-                        </div>
-                        {/* Custom Progress Bar */}
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                            <div
-                                className={`h-full transition-all duration-300 ease-out ${isPaused ? 'bg-yellow-500' : 'bg-blue-600'}`}
-                                style={{ width: `${progress}%` }}
-                            />
-                        </div>
+                <div className="mt-6">
+                    <div className="mb-2 flex justify-between text-sm">
+                        <span className="text-gray-600 tabular-nums">
+                            {formatNumber(jobStatus.processedCount)} / {formatNumber(jobStatus.totalContents)}
+                        </span>
+                        <span className="font-semibold text-gray-900 tabular-nums">{Math.round(progress)}%</span>
                     </div>
-
-                    <div className={`p-3 rounded-lg ${isPaused ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
-                        <p className={`text-sm ${isPaused ? 'text-yellow-800 dark:text-yellow-200' : 'text-blue-800 dark:text-blue-200'}`}>
-                            ⏱️ Publishing with {jobStatus.delaySeconds}s delay between items
-                        </p>
-                        <p className={`text-xs mt-1 ${isPaused ? 'text-yellow-600 dark:text-yellow-300' : 'text-blue-600 dark:text-blue-300'}`}>
-                            Status: {jobStatus.status}
-                        </p>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                        <div
+                            className={`h-full rounded-full transition-all duration-300 ease-out ${isPaused ? 'bg-amber-400' : 'bg-blue-600'}`}
+                            style={{ width: `${progress}%` }}
+                        />
                     </div>
-
-                    {/* Control Buttons */}
-                    <div className="flex gap-2">
-                        {isPaused ? (
-                            <Button
-                                size="lg"
-                                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                                onClick={() => resumeMutation.mutate()}
-                                isDisabled={resumeMutation.isPending}
-                            >
-                                <RotateCcw className="w-5 h-5 mr-2" />
-                                {resumeMutation.isPending ? 'Resuming...' : 'Resume'}
-                            </Button>
-                        ) : isProcessing ? (
-                            <Button
-                                size="lg"
-                                className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white"
-                                onClick={() => pauseMutation.mutate()}
-                                isDisabled={pauseMutation.isPending}
-                            >
-                                <Pause className="w-5 h-5 mr-2" />
-                                {pauseMutation.isPending ? 'Pausing...' : 'Pause'}
-                            </Button>
-                        ) : null}
-
-                        <Button
-                            size="lg"
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                            onClick={() => cancelMutation.mutate()}
-                            isDisabled={cancelMutation.isPending}
-                        >
-                            <X className="w-5 h-5 mr-2" />
-                            {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
-                        </Button>
-                    </div>
+                    <p className="mt-2 text-xs text-gray-500">
+                        Status: <span className="font-medium capitalize text-gray-700">{jobStatus.status}</span>
+                        {jobStatus.status === 'pending' && ' · waiting for the scheduler (runs every 30s)'}
+                    </p>
                 </div>
-            </Card>
+
+                <div className="mt-auto flex gap-2 pt-6">
+                    {isPaused ? (
+                        <button
+                            className="btn btn-success flex-1"
+                            onClick={() => resumeMutation.mutate()}
+                            disabled={resumeMutation.isPending}
+                        >
+                            <RotateCcw /> {resumeMutation.isPending ? 'Resuming...' : 'Resume'}
+                        </button>
+                    ) : isProcessing ? (
+                        <button
+                            className="btn btn-warning flex-1"
+                            onClick={() => pauseMutation.mutate()}
+                            disabled={pauseMutation.isPending}
+                        >
+                            <Pause /> {pauseMutation.isPending ? 'Pausing...' : 'Pause'}
+                        </button>
+                    ) : null}
+
+                    <button
+                        className="btn btn-secondary text-red-600"
+                        onClick={() => cancelMutation.mutate()}
+                        disabled={cancelMutation.isPending}
+                    >
+                        <X /> {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
+                    </button>
+                </div>
+            </div>
         )
     }
 
     return (
-        <Card className="p-6">
-            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <Zap className="w-6 h-6 text-yellow-500" />
-                Publish Content
-            </h3>
+        <div className="surface flex flex-col p-5 sm:p-6">
+            {header(
+                'Auto Publish',
+                'Publishes every queued article in the background, one by one. Drafts are never included.',
+            )}
 
-            <div className="space-y-4">
-                <div>
-                    <p className="text-sm text-gray-600 mb-4">
-                        Publish all pending content in the background. The process will continue even if you navigate away or refresh the page.
+            <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+                    <p className="text-xs font-medium text-gray-500">Queued</p>
+                    <p className="mt-1 text-xl font-semibold text-gray-900 tabular-nums">
+                        {formatNumber(pendingContents)}
+                        <span className="ml-1 text-sm font-normal text-gray-400">/ {formatNumber(totalContents)}</span>
                     </p>
-
-                    <div className="flex items-center gap-4 mb-4">
-                        <div className="flex-1">
-                            <label className="block text-sm font-medium mb-2">Delay between items (seconds)</label>
-                            <input
-                                type="number"
-                                min="0"
-                                max="3600"
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                value={delaySeconds}
-                                onChange={(e) => setDelaySeconds(Math.max(0, parseInt(e.target.value) || 0))}
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                                0 = publish immediately, recommended: 3-10 seconds
-                            </p>
-                        </div>
-
-                        <div className="text-center">
-                            <Clock className="w-8 h-8 text-gray-400 mx-auto mb-1" />
-                            <p className="text-xs text-gray-500">
-                                Est. time:<br />
-                                ~{Math.ceil((pendingContents * delaySeconds) / 60)} min
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg mb-4">
-                        <p className="text-sm text-blue-800 dark:text-blue-200">
-                            📊 <strong>{pendingContents}</strong> of <strong>{totalContents}</strong> items pending publication
-                        </p>
-                    </div>
                 </div>
-
-                <Button
-                    size="lg"
-                    className="w-full bg-green-600 hover:bg-green-700 text-white"
-                    onClick={handleStart}
-                    isDisabled={startPublishMutation.isPending || pendingContents === 0}
-                >
-                    <Play className="w-5 h-5 mr-2" />
-                    {startPublishMutation.isPending ? 'Starting...' : 'Start Publishing'}
-                </Button>
+                <div className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+                    <p className="flex items-center gap-1 text-xs font-medium text-gray-500">
+                        <Clock className="h-3 w-3" /> Est. time
+                    </p>
+                    <p className="mt-1 text-xl font-semibold text-gray-900 tabular-nums">
+                        ~{Math.ceil((pendingContents * delaySeconds) / 60)} min
+                    </p>
+                </div>
             </div>
-        </Card>
+
+            <div className="mt-5">
+                <label className="label" htmlFor="publish-delay">Delay between items (seconds)</label>
+                <input
+                    id="publish-delay"
+                    type="number"
+                    min="0"
+                    max="3600"
+                    className="field"
+                    value={delaySeconds}
+                    onChange={(e) => setDelaySeconds(Math.max(0, parseInt(e.target.value) || 0))}
+                />
+                <p className="hint">0 = publish immediately · recommended 3–10 seconds. Keeps running if you leave this page.</p>
+            </div>
+
+            <button
+                className="btn btn-primary mt-5 w-full"
+                onClick={handleStart}
+                disabled={startPublishMutation.isPending || pendingContents === 0}
+            >
+                <Play /> {startPublishMutation.isPending ? 'Starting...' : 'Start auto publish'}
+            </button>
+        </div>
     )
 }

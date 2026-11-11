@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, MoreThanOrEqual } from 'typeorm';
+import { Repository, In, Not, MoreThanOrEqual } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import * as Handlebars from 'handlebars';
@@ -26,7 +26,7 @@ export class ContentGeneratorService {
         private publishQueue: Queue,
     ) { }
 
-    async generateContent(projectId: string): Promise<{ jobId: string; totalRows: number }> {
+    async generateContent(projectId: string, asDraft = false): Promise<{ jobId: string; totalRows: number }> {
         const project = await this.projectRepository.findOne({
             where: { id: projectId },
         });
@@ -43,6 +43,7 @@ export class ContentGeneratorService {
         const job = await this.generationQueue.add('generate-content', {
             projectId,
             totalRows,
+            asDraft,
         });
 
         return {
@@ -51,7 +52,7 @@ export class ContentGeneratorService {
         };
     }
 
-    async generateContentSync(projectId: string): Promise<{ generatedCount: number }> {
+    async generateContentSync(projectId: string, asDraft = false): Promise<{ generatedCount: number }> {
         // Fetch project
         const project = await this.projectRepository.findOne({
             where: { id: projectId },
@@ -129,7 +130,7 @@ export class ContentGeneratorService {
                     tags,
                     slug,
                     thumbnailUrl: project.thumbnailUrl || undefined,
-                    publishStatus: PublishStatus.PENDING,
+                    publishStatus: asDraft ? PublishStatus.DRAFT : PublishStatus.PENDING,
                 });
 
                 currentBatch.push(generatedContent);
@@ -198,7 +199,15 @@ export class ContentGeneratorService {
             throw new Error('Content not found');
         }
 
+        const previousStatus = content.publishStatus;
         Object.assign(content, updates);
+
+        // Keep publishedAt consistent when the status is changed through a plain update
+        if (updates.publishStatus && updates.publishStatus !== previousStatus) {
+            (content as any).publishedAt =
+                updates.publishStatus === PublishStatus.PUBLISHED ? new Date() : null;
+        }
+
         return await this.contentRepository.save(content);
     }
 
@@ -262,11 +271,15 @@ export class ContentGeneratorService {
                 await new Promise(resolve => setTimeout(resolve, delay * 1000));
             }
 
-            content.publishStatus = PublishStatus.PUBLISHED;
-            content.publishedAt = new Date();
-            await this.contentRepository.save(content);
+            // Only publish if it is still pending (it may have been moved to draft meanwhile)
+            const result = await this.contentRepository.update(
+                { id: content.id, publishStatus: PublishStatus.PENDING },
+                { publishStatus: PublishStatus.PUBLISHED, publishedAt: new Date() },
+            );
 
-            publishedCount++;
+            if (result.affected) {
+                publishedCount++;
+            }
         }
 
         return { published: publishedCount };
@@ -286,6 +299,102 @@ export class ContentGeneratorService {
         }
 
         return { unpublished: unpublishedCount };
+    }
+
+    /**
+     * Manual / bulk status change for selected contents.
+     * - published: goes live immediately (manual publish, separate from auto-publish jobs).
+     *   Items that are already published keep their original publishedAt.
+     * - draft / pending: publishedAt is cleared.
+     */
+    async bulkUpdateStatus(contentIds: string[], status: PublishStatus): Promise<{ updated: number }> {
+        this.assertManualStatus(status);
+        const ids = Array.from(new Set(contentIds || [])).filter(Boolean);
+        if (ids.length === 0) {
+            return { updated: 0 };
+        }
+
+        let updated = 0;
+        for (const chunk of this.chunk(ids, 1000)) {
+            const qb = this.contentRepository
+                .createQueryBuilder()
+                .update(GeneratedContent)
+                .where('id IN (:...ids)', { ids: chunk });
+
+            if (status === PublishStatus.PUBLISHED) {
+                qb.set({ publishStatus: status, publishedAt: () => 'CURRENT_TIMESTAMP' })
+                    .andWhere('publishStatus != :published', { published: PublishStatus.PUBLISHED });
+            } else {
+                qb.set({ publishStatus: status, publishedAt: () => 'NULL' })
+                    .andWhere('publishStatus != :status', { status });
+            }
+
+            const result = await qb.execute();
+            updated += result.affected ?? 0;
+        }
+
+        return { updated };
+    }
+
+    /**
+     * Mass status change for a whole project, e.g. "move every queued item to draft"
+     * or "publish every draft now". Runs as a single UPDATE, independent of pagination.
+     */
+    async bulkUpdateProjectStatus(
+        projectId: string,
+        from: PublishStatus,
+        to: PublishStatus,
+    ): Promise<{ updated: number }> {
+        this.assertManualStatus(to);
+        if (!Object.values(PublishStatus).includes(from)) {
+            throw new BadRequestException(`Invalid source status: ${from}`);
+        }
+        if (from === to) {
+            return { updated: 0 };
+        }
+
+        const project = await this.projectRepository.findOne({ where: { id: projectId }, select: ['id'] });
+        if (!project) {
+            throw new NotFoundException('Project not found');
+        }
+
+        const result = await this.contentRepository
+            .createQueryBuilder()
+            .update(GeneratedContent)
+            .set({
+                publishStatus: to,
+                publishedAt: () => (to === PublishStatus.PUBLISHED ? 'CURRENT_TIMESTAMP' : 'NULL'),
+            })
+            .where('projectId = :projectId', { projectId })
+            .andWhere('publishStatus = :from', { from })
+            .execute();
+
+        return { updated: result.affected ?? 0 };
+    }
+
+    async bulkDelete(contentIds: string[]): Promise<{ deleted: number }> {
+        const ids = Array.from(new Set(contentIds || [])).filter(Boolean);
+        let deleted = 0;
+        for (const chunk of this.chunk(ids, 1000)) {
+            const result = await this.contentRepository.delete({ id: In(chunk) });
+            deleted += result.affected ?? 0;
+        }
+        return { deleted };
+    }
+
+    private assertManualStatus(status: PublishStatus) {
+        const allowed = [PublishStatus.DRAFT, PublishStatus.PENDING, PublishStatus.PUBLISHED];
+        if (!allowed.includes(status)) {
+            throw new BadRequestException(`Status must be one of: ${allowed.join(', ')}`);
+        }
+    }
+
+    private chunk<T>(items: T[], size: number): T[][] {
+        const chunks: T[][] = [];
+        for (let i = 0; i < items.length; i += size) {
+            chunks.push(items.slice(i, i + size));
+        }
+        return chunks;
     }
 
     async getPublishJobStatus(jobId: string): Promise<PublishJob> {
@@ -349,6 +458,7 @@ export class ContentGeneratorService {
         totalContent: number;
         publishedContent: number;
         pendingContent: number;
+        draftContent: number;
         failedContent: number;
         activeJobs: number;
         completedJobsToday: number;
@@ -368,6 +478,7 @@ export class ContentGeneratorService {
                     totalContent: 0,
                     publishedContent: 0,
                     pendingContent: 0,
+                    draftContent: 0,
                     failedContent: 0,
                     activeJobs: 0,
                     completedJobsToday: 0,
@@ -383,6 +494,9 @@ export class ContentGeneratorService {
             });
             const pendingContent = await this.contentRepository.count({
                 where: { projectId: In(projectIds), publishStatus: PublishStatus.PENDING },
+            });
+            const draftContent = await this.contentRepository.count({
+                where: { projectId: In(projectIds), publishStatus: PublishStatus.DRAFT },
             });
             const failedContent = await this.contentRepository.count({
                 where: { projectId: In(projectIds), publishStatus: PublishStatus.FAILED },
@@ -412,6 +526,7 @@ export class ContentGeneratorService {
                 totalContent,
                 publishedContent,
                 pendingContent,
+                draftContent,
                 failedContent,
                 activeJobs,
                 completedJobsToday,
@@ -426,6 +541,9 @@ export class ContentGeneratorService {
         });
         const pendingContent = await this.contentRepository.count({
             where: { publishStatus: PublishStatus.PENDING },
+        });
+        const draftContent = await this.contentRepository.count({
+            where: { publishStatus: PublishStatus.DRAFT },
         });
         const failedContent = await this.contentRepository.count({
             where: { publishStatus: PublishStatus.FAILED },
@@ -454,10 +572,25 @@ export class ContentGeneratorService {
             totalContent,
             publishedContent,
             pendingContent,
+            draftContent,
             failedContent,
             activeJobs,
             completedJobsToday,
         };
+    }
+
+    /**
+     * Public API status filter: drafts are never exposed.
+     * Returns null when the requested status can never match (status=draft).
+     */
+    private publicStatusFilter(status?: string): any {
+        if (!status) {
+            return Not(PublishStatus.DRAFT);
+        }
+        if (status === PublishStatus.DRAFT) {
+            return null;
+        }
+        return status as PublishStatus;
     }
 
     private generateDefaultTitle(data: Record<string, string>): string {
@@ -488,9 +621,11 @@ export class ContentGeneratorService {
     ): Promise<[GeneratedContent[], number]> {
         const where: any = { projectId };
 
-        if (status) {
-            where.publishStatus = status as PublishStatus;
+        const statusFilter = this.publicStatusFilter(status);
+        if (statusFilter === null) {
+            return [[], 0];
         }
+        where.publishStatus = statusFilter;
 
         return await this.contentRepository.findAndCount({
             where,
@@ -504,7 +639,9 @@ export class ContentGeneratorService {
      * Find one content for public API
      */
     async findOnePublic(id: string): Promise<GeneratedContent> {
-        const content = await this.contentRepository.findOne({ where: { id } });
+        const content = await this.contentRepository.findOne({
+            where: { id, publishStatus: Not(PublishStatus.DRAFT) },
+        });
 
         if (!content) {
             throw new Error('Content not found');
@@ -522,6 +659,7 @@ export class ContentGeneratorService {
             .innerJoin('content.project', 'project')
             .where('content.slug = :slug', { slug })
             .andWhere('project.organizationId = :organizationId', { organizationId })
+            .andWhere('content.publishStatus != :draft', { draft: PublishStatus.DRAFT })
             .getOne();
 
         if (!content) {
@@ -564,9 +702,11 @@ export class ContentGeneratorService {
 
         const where: any = { projectId: In(targetProjectIds) };
 
-        if (status) {
-            where.publishStatus = status as PublishStatus;
+        const statusFilter = this.publicStatusFilter(status);
+        if (statusFilter === null) {
+            return [[], 0];
         }
+        where.publishStatus = statusFilter;
 
         return await this.contentRepository.findAndCount({
             where,
@@ -614,9 +754,11 @@ export class ContentGeneratorService {
 
         const where: any = { projectId: In(projectIds) };
 
-        if (status) {
-            where.publishStatus = status as PublishStatus;
+        const statusFilter = this.publicStatusFilter(status);
+        if (statusFilter === null) {
+            return [[], 0];
         }
+        where.publishStatus = statusFilter;
 
         return await this.contentRepository.findAndCount({
             where,
