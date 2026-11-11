@@ -36,8 +36,8 @@ export class ContentGenerationProcessor {
             throw new Error('Project not found');
         }
 
-        // Delete existing content
-        await this.contentRepository.delete({ projectId });
+        // Delete existing mass-generated content; single (manual) articles are kept
+        await this.contentRepository.delete({ projectId, isManual: false });
 
         const contentTemplate = Handlebars.compile(project.template);
         const titleTemplate = project.titleTemplate ? Handlebars.compile(project.titleTemplate) : null;

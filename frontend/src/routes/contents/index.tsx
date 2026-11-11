@@ -1,11 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Spinner } from '@heroui/react';
 import { contentApi, categoriesApi } from '../../lib/api';
 import type { Category } from '../../lib/api';
 import { useOrganization } from '../../contexts/organization-context';
-import { Search, FileText, Tag, FolderOpen, X, Filter } from 'lucide-react';
+import { Search, FileText, Tag, FolderOpen, X, Filter, Plus } from 'lucide-react';
 import { ContentTable, ContentBulkBar } from '../../components/ContentTable';
 import { PageHeader, Pagination, formatNumber } from '../../components/ui';
 import { toggleInSet } from '../../lib/content-actions';
@@ -105,12 +105,17 @@ function ContentsPage() {
         title="All contents"
         description={`Browse every article in ${currentOrganization.name}`}
         actions={
-          contentsData && (
-            <div className="text-right">
-              <p className="text-2xl font-semibold text-gray-900 tabular-nums">{formatNumber(contentsData.total)}</p>
-              <p className="text-xs text-gray-500">articles</p>
-            </div>
-          )
+          <>
+            {contentsData && (
+              <div className="mr-3 text-right">
+                <p className="text-2xl font-semibold text-gray-900 tabular-nums">{formatNumber(contentsData.total)}</p>
+                <p className="text-xs text-gray-500">articles</p>
+              </div>
+            )}
+            <Link to="/contents/new" className="btn btn-primary">
+              <Plus /> New article
+            </Link>
+          </>
         }
       />
 

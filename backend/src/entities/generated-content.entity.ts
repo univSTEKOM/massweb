@@ -53,6 +53,11 @@ export class GeneratedContent {
     @Column({ type: 'timestamp', nullable: true })
     publishedAt: Date;
 
+    // true for single articles created by hand (not from mass generation).
+    // Mass (re)generation never deletes these.
+    @Column({ default: false })
+    isManual: boolean;
+
     @CreateDateColumn()
     createdAt: Date;
 

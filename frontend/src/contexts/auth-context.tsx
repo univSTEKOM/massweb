@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { User, AuthResponse, LoginRequest, RegisterRequest } from '../lib/api';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import type { User, LoginRequest, RegisterRequest } from '../lib/api';
 import { authApi } from '../lib/api';
 import { toast } from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
@@ -65,8 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             toast.success('Welcome back!');
         } catch (error: any) {
-            const message = error.response?.data?.message || 'Login failed';
-            toast.error(message);
+            // The login form shows the error inline
             throw error;
         }
     };
@@ -89,8 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 toast.success('Account created successfully!');
             }
         } catch (error: any) {
-            const message = error.response?.data?.message || 'Registration failed';
-            toast.error(message);
+            // The register form shows the error inline
             throw error;
         }
     };

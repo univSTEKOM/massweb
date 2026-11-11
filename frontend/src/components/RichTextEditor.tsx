@@ -10,7 +10,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@heroui/react'
 import {
     Bold, Italic, Underline as UnderlineIcon, Code, List, ListOrdered,
@@ -55,6 +55,16 @@ export function RichTextEditor({ value, onChange, label }: RichTextEditorProps) 
             },
         },
     })
+
+    // Follow external value changes (async-loaded content, template fill-in).
+    // Edits made in the editor round-trip through onChange, so they match and are skipped.
+    useEffect(() => {
+        if (!editor || editor.isDestroyed) return
+        if ((value || '') !== editor.getHTML()) {
+            editor.commands.setContent(value || '', { emitUpdate: false })
+            setHtmlContent(value || '')
+        }
+    }, [value, editor])
 
     const addLink = () => {
         const url = prompt('Enter URL:')

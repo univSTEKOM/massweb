@@ -7,6 +7,8 @@ import * as Handlebars from 'handlebars';
 import { GeneratedContent, PublishStatus } from '../entities/generated-content.entity';
 import { Project } from '../entities/project.entity';
 import { CsvRow } from '../entities/csv-row.entity';
+import { CsvColumn } from '../entities/csv-column.entity';
+import { CreateSingleContentDto } from './dto/single-content.dto';
 import { PublishJob, JobStatus } from '../entities/publish-job.entity';
 
 @Injectable()
@@ -18,6 +20,8 @@ export class ContentGeneratorService {
         private projectRepository: Repository<Project>,
         @InjectRepository(CsvRow)
         private csvRowRepository: Repository<CsvRow>,
+        @InjectRepository(CsvColumn)
+        private csvColumnRepository: Repository<CsvColumn>,
         @InjectRepository(PublishJob)
         private publishJobRepository: Repository<PublishJob>,
         @InjectQueue('content-generation')
@@ -62,8 +66,8 @@ export class ContentGeneratorService {
             throw new Error('Project not found');
         }
 
-        // Clear existing generated content
-        await this.contentRepository.delete({ projectId });
+        // Clear existing mass-generated content; single (manual) articles are kept
+        await this.contentRepository.delete({ projectId, isManual: false });
 
         // Compile templates once
         const contentTemplate = Handlebars.compile(project.template);
@@ -81,6 +85,13 @@ export class ContentGeneratorService {
         let generatedCount = 0;
         let currentBatch: GeneratedContent[] = [];
         const usedSlugs = new Set<string>();
+
+        // Never reuse a slug that belongs to a kept single article
+        const manualArticles = await this.contentRepository.find({
+            where: { projectId, isManual: true },
+            select: ['id', 'slug'],
+        });
+        manualArticles.forEach((a) => usedSlugs.add(a.slug));
 
         while (hasMore) {
             const rows = await this.csvRowRepository.find({
@@ -370,6 +381,155 @@ export class ContentGeneratorService {
             .execute();
 
         return { updated: result.affected ?? 0 };
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Single (manual) articles                                            */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Variables a single article can fill in: the project's CSV columns (in order)
+     * plus any variable referenced by its templates.
+     */
+    async getTemplateFields(projectId: string): Promise<{ fields: string[] }> {
+        const project = await this.projectRepository.findOne({ where: { id: projectId } });
+        if (!project) {
+            throw new NotFoundException('Project not found');
+        }
+
+        const columns = await this.csvColumnRepository.find({
+            where: { projectId },
+            order: { columnOrder: 'ASC' },
+            select: ['id', 'columnName'],
+        });
+
+        const fields: string[] = [];
+        const add = (name: string) => {
+            const clean = name.trim();
+            if (clean && !fields.includes(clean)) fields.push(clean);
+        };
+        columns.forEach((c) => add(c.columnName));
+        [project.titleTemplate, project.template, project.metaDescriptionTemplate, project.tagsTemplate]
+            .filter(Boolean)
+            .forEach((tpl) => this.extractTemplateVariables(tpl).forEach(add));
+
+        return { fields };
+    }
+
+    /** Render the project templates for one set of values (used to prefill a single article). */
+    async renderTemplate(projectId: string, variables: Record<string, string>) {
+        const project = await this.projectRepository.findOne({ where: { id: projectId } });
+        if (!project) {
+            throw new NotFoundException('Project not found');
+        }
+        return this.renderProject(project, this.cleanVariables(variables));
+    }
+
+    /**
+     * Create one article by hand. Empty fields are filled from the project templates
+     * (same Handlebars concept as mass generation). Defaults to draft.
+     */
+    async createSingleContent(projectId: string, dto: CreateSingleContentDto): Promise<GeneratedContent> {
+        const project = await this.projectRepository.findOne({ where: { id: projectId } });
+        if (!project) {
+            throw new NotFoundException('Project not found');
+        }
+
+        const rendered = dto.variables ? this.renderProject(project, this.cleanVariables(dto.variables)) : null;
+        const pick = (value: string | undefined, fallback?: string) =>
+            value !== undefined && value.trim() !== '' ? value : (fallback ?? '');
+
+        const title = pick(dto.title, rendered?.title).trim();
+        const content = pick(dto.content, rendered?.content);
+        if (!title) {
+            throw new BadRequestException('Title is required');
+        }
+        if (!content.trim()) {
+            throw new BadRequestException('Content is required');
+        }
+
+        const status = dto.status ?? PublishStatus.DRAFT;
+        this.assertManualStatus(status);
+
+        const slugBase = this.generateSlug(pick(dto.slug, title), '') || 'article';
+        const slug = await this.ensureUniqueSlug(slugBase, project);
+
+        const article = this.contentRepository.create({
+            projectId,
+            title,
+            content,
+            metaDescription: pick(dto.metaDescription, rendered?.metaDescription),
+            tags: pick(dto.tags, rendered?.tags),
+            slug,
+            thumbnailUrl: dto.thumbnailUrl || project.thumbnailUrl || undefined,
+            publishStatus: status,
+            isManual: true,
+        });
+        if (status === PublishStatus.PUBLISHED) {
+            article.publishedAt = new Date();
+        }
+
+        return await this.contentRepository.save(article);
+    }
+
+    private renderProject(project: Project, data: Record<string, string>) {
+        const render = (tpl?: string | null) => (tpl ? Handlebars.compile(tpl)(data) : '');
+        const title = project.titleTemplate ? render(project.titleTemplate) : this.generateDefaultTitle(data);
+        return {
+            title,
+            content: render(project.template),
+            metaDescription: render(project.metaDescriptionTemplate),
+            tags: render(project.tagsTemplate),
+            slug: this.generateSlug(title, ''),
+        };
+    }
+
+    private cleanVariables(variables: Record<string, unknown> = {}): Record<string, string> {
+        const out: Record<string, string> = {};
+        for (const [key, value] of Object.entries(variables)) {
+            if (typeof key === 'string' && key.length <= 200) {
+                out[key] = value === null || value === undefined ? '' : String(value);
+            }
+        }
+        return out;
+    }
+
+    /** Variable names used in a Handlebars template: {{name}}, {{{name}}}, {{[Column Name]}} */
+    private extractTemplateVariables(template: string): string[] {
+        const names: string[] = [];
+        const re = /\{\{\{?\s*(?:\[([^\]]+)\]|([A-Za-z0-9_][\w.-]*))\s*\}?\}\}/g;
+        let match: RegExpExecArray | null;
+        while ((match = re.exec(template)) !== null) {
+            const name = (match[1] ?? match[2] ?? '').trim();
+            if (name && name !== 'else' && name !== 'this' && !names.includes(name)) {
+                names.push(name);
+            }
+        }
+        return names;
+    }
+
+    /** Slugs are looked up per organization by the public API, so keep them unique there. */
+    private async ensureUniqueSlug(base: string, project: Project): Promise<string> {
+        const qb = this.contentRepository
+            .createQueryBuilder('content')
+            .select('content.slug', 'slug')
+            .where('(content.slug = :base OR content.slug LIKE :like)', { base, like: `${base}-%` });
+
+        if (project.organizationId) {
+            qb.innerJoin('content.project', 'project').andWhere('project.organizationId = :org', {
+                org: project.organizationId,
+            });
+        } else {
+            qb.andWhere('content.projectId = :projectId', { projectId: project.id });
+        }
+
+        const taken = new Set((await qb.getRawMany<{ slug: string }>()).map((r) => r.slug));
+        if (!taken.has(base)) {
+            return base;
+        }
+        let i = 2;
+        while (taken.has(`${base}-${i}`)) i++;
+        return `${base}-${i}`;
     }
 
     async bulkDelete(contentIds: string[]): Promise<{ deleted: number }> {

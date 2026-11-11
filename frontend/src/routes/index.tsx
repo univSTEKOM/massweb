@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Sparkles, FileText, Zap, FileEdit, ArrowRight } from 'lucide-react'
+import { Braces, FileText, Zap, FileEdit, ArrowRight, TrendingUp } from 'lucide-react'
 
 export const Route = createFileRoute('/')({
   component: HomePage,
@@ -13,7 +13,7 @@ const FEATURES = [
     desc: 'Upload your data and let the system create content combinations.',
   },
   {
-    icon: Sparkles,
+    icon: Braces,
     tone: 'bg-purple-50 text-purple-600',
     title: 'Template engine',
     desc: 'Handlebars templates with click-to-insert variables.',
@@ -39,7 +39,7 @@ function HomePage() {
       <div className="mx-auto max-w-6xl px-4 pt-20 pb-24 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/70 px-3 py-1 text-xs font-medium text-blue-700">
-            <Sparkles className="h-3.5 w-3.5" /> Programmatic SEO at scale
+            <TrendingUp className="h-3.5 w-3.5" /> Programmatic SEO at scale
           </span>
           <h1 className="mt-6 text-4xl font-semibold tracking-tight text-gray-900 sm:text-6xl">
             Mass Marketing{' '}

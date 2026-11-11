@@ -2,7 +2,7 @@ import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { Spinner } from '@heroui/react'
-import { Building2, FileEdit, FolderOpen, Search } from 'lucide-react'
+import { Building2, FileEdit, FolderOpen, Plus, Search } from 'lucide-react'
 import { contentApi } from '../lib/api'
 import { useOrganization } from '../contexts/organization-context'
 import { ContentTable, ContentBulkBar } from '../components/ContentTable'
@@ -83,12 +83,17 @@ function DraftsPage() {
                 title="Drafts"
                 description="Articles parked as draft. Auto-publish never touches them. Review here and publish manually when ready."
                 actions={
-                    data && (
-                        <div className="text-right">
-                            <p className="text-2xl font-semibold text-gray-900 tabular-nums">{formatNumber(data.total)}</p>
-                            <p className="text-xs text-gray-500">drafts</p>
-                        </div>
-                    )
+                    <>
+                        {data && (
+                            <div className="mr-3 text-right">
+                                <p className="text-2xl font-semibold text-gray-900 tabular-nums">{formatNumber(data.total)}</p>
+                                <p className="text-xs text-gray-500">drafts</p>
+                            </div>
+                        )}
+                        <Link to="/contents/new" className="btn btn-primary">
+                            <Plus /> New article
+                        </Link>
+                    </>
                 }
             />
 

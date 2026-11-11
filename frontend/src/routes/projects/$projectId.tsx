@@ -2,7 +2,7 @@ import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import { Spinner } from '@heroui/react'
-import { Book, CheckCircle2, Clock, FileEdit, FileText, Search, Sparkles } from 'lucide-react'
+import { Book, CheckCircle2, Clock, FileEdit, FileText, Layers, Plus, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { projectsApi, contentApi, type PublishStatus } from '../../lib/api'
 import { ExportMenu } from '../../components/ExportMenu'
@@ -164,6 +164,9 @@ function ProjectDetailPage() {
                         <Link to="/projects/$projectId/api-docs" params={{ projectId }} className="btn btn-secondary btn-sm">
                             <Book /> API Docs
                         </Link>
+                        <Link to="/contents/new" search={{ projectId }} className="btn btn-primary btn-sm">
+                            <Plus /> New article
+                        </Link>
                     </>
                 }
             />
@@ -229,7 +232,7 @@ function ProjectDetailPage() {
                     isProjectEmpty && !debouncedSearch ? (
                         <div className="mx-auto max-w-md px-4 py-14 text-center">
                             <span className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                                <Sparkles className="h-6 w-6" />
+                                <Layers className="h-6 w-6" />
                             </span>
                             <h3 className="text-base font-semibold text-gray-900">No articles generated yet</h3>
                             <p className="mt-1 text-sm text-gray-500">
@@ -246,7 +249,7 @@ function ProjectDetailPage() {
                             </label>
                             <div className="mt-4">
                                 <button className="btn btn-primary" onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
-                                    <Sparkles /> {generateMutation.isPending ? 'Generating...' : 'Generate articles'}
+                                    <Layers /> {generateMutation.isPending ? 'Generating...' : 'Generate articles'}
                                 </button>
                             </div>
                         </div>

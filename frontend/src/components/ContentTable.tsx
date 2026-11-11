@@ -109,6 +109,11 @@ export function ContentTable({ contents, selected, onToggle, onToggleAll, projec
                                     {content.title || 'Untitled'}
                                 </Link>
                                 <div className="mt-0.5 flex min-w-0 items-center gap-3 text-xs text-gray-500">
+                                    {content.isManual && (
+                                        <span className="inline-flex shrink-0 items-center rounded bg-blue-50 px-1.5 py-px text-[11px] font-medium text-blue-700" title="Single article, created by hand">
+                                            Single
+                                        </span>
+                                    )}
                                     {projectNames?.[content.projectId] && (
                                         <span className="inline-flex shrink-0 items-center gap-1">
                                             <FolderOpen className="h-3 w-3" />

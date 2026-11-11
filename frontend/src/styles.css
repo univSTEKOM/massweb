@@ -94,6 +94,63 @@ code {
     @apply h-4 w-4 cursor-pointer rounded border-gray-300 accent-blue-600;
   }
 
+  /* Minimal typography for rendered article HTML (editor + previews).
+     @tailwindcss/typography is not installed, so `prose` is defined here. */
+  .prose {
+    @apply leading-relaxed text-gray-800;
+  }
+  .prose :where(h1) {
+    @apply mt-5 mb-2 text-2xl font-bold text-gray-900;
+  }
+  .prose :where(h2) {
+    @apply mt-5 mb-2 text-xl font-semibold text-gray-900;
+  }
+  .prose :where(h3) {
+    @apply mt-4 mb-1.5 text-lg font-semibold text-gray-900;
+  }
+  .prose :where(p) {
+    @apply my-2;
+  }
+  .prose :where(ul) {
+    @apply my-2 list-disc pl-6;
+  }
+  .prose :where(ol) {
+    @apply my-2 list-decimal pl-6;
+  }
+  .prose :where(li) {
+    @apply my-0.5;
+  }
+  .prose :where(a) {
+    @apply text-blue-600 underline;
+  }
+  .prose :where(blockquote) {
+    @apply my-3 border-l-4 border-gray-200 pl-4 text-gray-600 italic;
+  }
+  .prose :where(code) {
+    @apply rounded bg-gray-100 px-1 py-0.5 text-[0.9em];
+  }
+  .prose :where(pre) {
+    @apply my-3 overflow-x-auto rounded-lg bg-gray-900 p-3 text-gray-100;
+  }
+  .prose :where(pre code) {
+    @apply bg-transparent p-0;
+  }
+  .prose :where(table) {
+    @apply my-3 w-full border-collapse text-sm;
+  }
+  .prose :where(th, td) {
+    @apply border border-gray-200 px-3 py-1.5 text-left;
+  }
+  .prose :where(th) {
+    @apply bg-gray-50 font-semibold;
+  }
+  .prose :where(img) {
+    @apply my-3 max-w-full rounded-lg;
+  }
+  .prose :where(> :first-child) {
+    @apply mt-0;
+  }
+
   /* Section title inside a surface */
   .section-title {
     @apply text-base font-semibold tracking-tight text-gray-900;

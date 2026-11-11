@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link, createFileRoute, redirect } from '@tanstack/react-router';
-import { Card, Input, Button } from '@heroui/react';
+import { AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/auth-context';
+import { AuthShell, PasswordField } from '../components/AuthShell';
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
@@ -16,73 +17,93 @@ export const Route = createFileRoute('/login')({
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setIsLoading(true);
 
     try {
       await login(formData);
       navigate({ to: '/projects' });
-    } catch (error) {
-      // Error handled by auth context
+    } catch (err: any) {
+      const message = err?.response?.data?.message;
+      setError(
+        Array.isArray(message)
+          ? message.join(', ')
+          : message === 'Invalid credentials'
+            ? 'Email or password is incorrect.'
+            : message || 'Unable to sign in. Please try again.',
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-          <p className="text-gray-600">Sign in to your account</p>
-        </div>
+    <AuthShell
+      title="Welcome back"
+      subtitle="Sign in to manage your projects and content."
+      footer={
+        <>
+          Don&apos;t have an account?{' '}
+          <Link to="/register" className="font-medium text-blue-600 hover:text-blue-700">
+            Create one
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate={false}>
+        {error && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700" role="alert">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            {error}
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Input
+        <div>
+          <label className="label" htmlFor="email">Email</label>
+          <input
+            id="email"
             type="email"
-            label="Email"
-            placeholder="Enter your email"
+            className="field h-11"
+            placeholder="you@company.com"
+            autoComplete="email"
+            autoFocus
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             required
-            fullWidth
           />
+        </div>
 
-          <Input
-            type="password"
-            label="Password"
+        <div>
+          <label className="label" htmlFor="password">Password</label>
+          <PasswordField
+            id="password"
+            className="h-11"
             placeholder="Enter your password"
+            autoComplete="current-password"
             value={formData.password}
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
             required
-            fullWidth
           />
+        </div>
 
-          <Button
-            type="submit"
-            color="primary"
-            size="lg"
-            fullWidth
-            isLoading={isLoading}
-          >
-            Sign In
-          </Button>
-
-          <div className="text-center text-sm text-gray-600">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
-              Sign up
-            </Link>
-          </div>
-        </form>
-      </Card>
-    </div>
+        <button type="submit" className="btn btn-primary btn-lg w-full" disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <Loader2 className="animate-spin" /> Signing in...
+            </>
+          ) : (
+            <>
+              Sign in <ArrowRight />
+            </>
+          )}
+        </button>
+      </form>
+    </AuthShell>
   );
 }

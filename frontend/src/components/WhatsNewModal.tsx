@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, ChevronRight as Arrow, Sparkles, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronRight as Arrow, Megaphone, X } from 'lucide-react'
 
 /**
  * "What's new" announcement shown as a slide carousel.
@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, ChevronRight as Arrow, Sparkles, X } from 'l
  * so a new device (or a fresh browser) sees it right after logging in. Bump RELEASE_ID
  * and replace SLIDES when announcing the next set of features.
  */
-export const WHATS_NEW_RELEASE_ID = '2026-11-mass-draft'
+export const WHATS_NEW_RELEASE_ID = '2026-11-single-article'
 const STORAGE_KEY = 'massweb_whats_new_seen'
 
 interface Slide {
@@ -23,14 +23,22 @@ interface Slide {
 const SLIDES: Slide[] = [
     {
         image: '/whats-new/overview.png',
-        title: 'Draft massal & publish manual',
+        title: 'Yang baru di Massweb',
         description:
-            'Artikel sekarang bisa disimpan sebagai draft dalam jumlah banyak, lalu dipublish manual kapan pun Anda siap, terpisah dari Auto Publish.',
+            'Artikel kini bisa disimpan sebagai draft dalam jumlah banyak, dipublish manual kapan pun Anda siap, dan dibuat satu per satu di luar generate massal.',
         bullets: [
+            'Buat artikel satuan dari template project atau tulis manual.',
             'Status baru Draft: tidak pernah ikut Auto Publish dan tidak muncul di public API.',
             'Panel Auto Publish dan Manual Publish kini dipisah di halaman project.',
             'Halaman baru Drafts untuk meninjau & publish draft dari semua project.',
         ],
+    },
+    {
+        image: '/whats-new/new-article.png',
+        title: 'Buat artikel satuan',
+        description:
+            'Bikin satu artikel tanpa generate massal. Pilih project, isi variabel seperti satu baris CSV, klik "Fill from template", lalu sesuaikan isinya. Atau pilih "Write manually" untuk menulis sendiri. Artikel satuan tidak ikut terhapus saat project di-generate ulang.',
+        path: ['Contents', 'New article', 'Pilih project', 'Isi variabel', 'Fill from template', 'Create draft'],
     },
     {
         image: '/whats-new/generate-draft.png',
@@ -167,7 +175,7 @@ export function WhatsNewModal({ open, onClose }: WhatsNewModalProps) {
                     <div className="px-5 py-5 sm:px-7 sm:py-7">
                         <div className="mb-2 flex items-center gap-2 text-xs font-medium">
                             <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
-                                <Sparkles className="h-3 w-3" /> Fitur baru
+                                <Megaphone className="h-3 w-3" /> Fitur baru
                             </span>
                             <span className="text-gray-400 tabular-nums">
                                 {index + 1} / {SLIDES.length}
