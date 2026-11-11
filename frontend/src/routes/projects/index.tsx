@@ -6,6 +6,7 @@ import { Plus, Calendar, FileText, CheckCircle2, Clock, Activity, Zap, BarChart3
 import { ProjectCardSkeleton } from '../../components/Skeleton'
 import { EmptyState } from '../../components/EmptyState'
 import { PageHeader, ProjectTypeBadge, StatTile, formatNumber } from '../../components/ui'
+import { useConfirm } from '../../components/Modal'
 import { useOrganization } from '../../contexts/organization-context'
 import toast from 'react-hot-toast'
 
@@ -207,6 +208,7 @@ function ProjectsPage() {
 
 function ProjectCard({ project }: { project: Project }) {
     const queryClient = useQueryClient()
+    const confirm = useConfirm()
 
     const formatStat = (value: number | undefined): string => {
         if (!value) return '0'
@@ -230,12 +232,15 @@ function ProjectCard({ project }: { project: Project }) {
         },
     })
 
-    const handleDelete = (e: React.MouseEvent) => {
+    const handleDelete = async (e: React.MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
-        if (window.confirm(`Are you sure you want to delete "${project.name}"? This will delete all generated content. This action cannot be undone.`)) {
-            deleteMutation.mutate()
-        }
+        const ok = await confirm({
+            title: `Delete "${project.name}"?`,
+            message: `All ${formatNumber(stats?.totalContents)} articles in this project are deleted too. This cannot be undone.`,
+            confirmText: 'Delete project',
+        })
+        if (ok) deleteMutation.mutate()
     }
 
     const total = stats?.totalContents ?? 0

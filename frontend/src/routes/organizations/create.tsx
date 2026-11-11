@@ -1,16 +1,16 @@
 import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { organizationsApi } from '../../lib/api';
-import { Card, Button } from '@heroui/react';
-import { Building2, ArrowLeft } from 'lucide-react';
+import { Building2, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { organizationsApi } from '../../lib/api';
+import { useOrganization } from '../../contexts/organization-context';
+import { PageHeader } from '../../components/ui';
 
 export const Route = createFileRoute('/organizations/create')({
   component: CreateOrganizationPage,
   beforeLoad: async () => {
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
+    if (!localStorage.getItem('auth_token')) {
       throw redirect({ to: '/login' });
     }
   },
@@ -19,89 +19,63 @@ export const Route = createFileRoute('/organizations/create')({
 function CreateOrganizationPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { setCurrentOrganization } = useOrganization();
   const [name, setName] = useState('');
 
   const createMutation = useMutation({
-    mutationFn: async () => {
-      return await organizationsApi.create({ name });
-    },
-    onSuccess: (response) => {
+    mutationFn: async () => (await organizationsApi.create({ name: name.trim() })).data,
+    onSuccess: (organization) => {
+      // Make the new organization the active one, so every page shows its data
+      localStorage.setItem('current_organization_id', organization.id);
+      setCurrentOrganization(organization);
       queryClient.invalidateQueries({ queryKey: ['organizations'] });
-      toast.success('Organization created successfully');
-      navigate({ to: `/organizations/${response.data.id}/settings` });
+      toast.success(`Organization "${organization.name}" created`);
+      navigate({ to: '/projects' });
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create organization');
-    },
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to create organization'),
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error('Organization name is required');
-      return;
-    }
-    createMutation.mutate();
-  };
-
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <div className="mb-6">
-        <button
-          onClick={() => navigate({ to: '/projects' })}
-          className="flex items-center text-blue-600 hover:text-blue-700 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </button>
-        <h1 className="text-3xl font-bold text-gray-900">Create Organization</h1>
-        <p className="text-gray-600 mt-2">
-          Organizations help you manage projects and team members.
-        </p>
-      </div>
+    <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8">
+      <PageHeader
+        back={{ to: '/projects', label: 'Projects' }}
+        title="Create organization"
+        description="Organizations group projects, members, categories and API keys."
+      />
 
-      <Card className="p-6">
-        <div className="flex items-center space-x-3 mb-6">
-          <Building2 className="w-8 h-8 text-blue-600" />
-          <h2 className="text-2xl font-bold">Organization Details</h2>
+      <form
+        className="surface p-5 sm:p-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) createMutation.mutate();
+        }}
+      >
+        <div className="mb-5 flex items-center gap-2.5">
+          <Building2 className="h-5 w-5 text-gray-400" />
+          <h2 className="section-title">Details</h2>
         </div>
+        <label className="label" htmlFor="org-name">Organization name</label>
+        <input
+          id="org-name"
+          className="field"
+          placeholder="e.g. Tim Marketing"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
+          required
+        />
+        <p className="hint">You can rename it later. It becomes your active organization after creation.</p>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Organization Name *
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="My Company"
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Choose a name that represents your team or company
-            </p>
-          </div>
-
-          <div className="flex space-x-3">
-            <Button
-              type="submit"
-              disabled={createMutation.isPending || !name.trim()}
-              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {createMutation.isPending ? 'Creating...' : 'Create Organization'}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => navigate({ to: '/projects' })}
-              className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </Card>
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" className="btn btn-secondary" onClick={() => navigate({ to: '/projects' })}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={!name.trim() || createMutation.isPending}>
+            {createMutation.isPending && <Loader2 className="animate-spin" />}
+            Create organization
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { contentApi, type ManualPublishStatus } from '../../lib/api'
 import { RichTextEditor } from '../../components/RichTextEditor'
 import { PageHeader, StatusBadge } from '../../components/ui'
+import { useConfirm } from '../../components/Modal'
 
 export const Route = createFileRoute('/contents/$contentId')({
   component: ContentEditPage,
@@ -22,6 +23,7 @@ function ContentEditPage() {
   const { contentId } = Route.useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const confirm = useConfirm()
   const [showPreview, setShowPreview] = useState(true)
   const [initializedFor, setInitializedFor] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -106,10 +108,9 @@ function ContentEditPage() {
     onError: () => toast.error('Failed to delete content'),
   })
 
-  const handleDelete = () => {
-    if (confirm('Are you sure you want to delete this content?')) {
-      deleteMutation.mutate()
-    }
+  const handleDelete = async () => {
+    const ok = await confirm({ title: 'Delete this article?', message: 'This cannot be undone.', confirmText: 'Delete article' })
+    if (ok) deleteMutation.mutate()
   }
 
   if (isLoading) {

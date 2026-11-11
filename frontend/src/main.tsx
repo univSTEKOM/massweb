@@ -11,6 +11,7 @@ import './styles.css'
 import reportWebVitals from './reportWebVitals.ts'
 import { AuthProvider } from './contexts/auth-context'
 import { OrganizationProvider } from './contexts/organization-context'
+import { ConfirmProvider } from './components/Modal'
 
 // Create a query client
 const queryClient = new QueryClient({
@@ -48,7 +49,9 @@ if (rootElement && !rootElement.innerHTML) {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <OrganizationProvider>
-            <RouterProvider router={router} />
+            <ConfirmProvider>
+              <RouterProvider router={router} />
+            </ConfirmProvider>
             <Toaster
               position="top-right"
               toastOptions={{

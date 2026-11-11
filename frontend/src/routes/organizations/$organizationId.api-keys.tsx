@@ -1,12 +1,18 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useState, useEffect } from 'react';
-import { Card, Button } from '@heroui/react';
-import { Plus, Trash2, Key, RefreshCw } from 'lucide-react';
-import { CreateApiKeyModal } from '../../components/CreateApiKeyModal';
+import { createFileRoute, redirect } from '@tanstack/react-router';
+import { useState, useEffect, useCallback } from 'react';
+import { Key, Loader2, Plus, RefreshCw, ShieldCheck, Ban, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { CreateApiKeyModal, KeyReveal } from '../../components/CreateApiKeyModal';
+import { Modal, useConfirm } from '../../components/Modal';
+import { PageHeader, formatDate } from '../../components/ui';
 
 export const Route = createFileRoute('/organizations/$organizationId/api-keys')({
   component: ApiKeysPage,
+  beforeLoad: async () => {
+    if (!localStorage.getItem('auth_token')) {
+      throw redirect({ to: '/login' });
+    }
+  },
 });
 
 interface ApiKey {
@@ -16,370 +22,248 @@ interface ApiKey {
   lastUsedAt: string | null;
   expiresAt: string | null;
   createdAt: string;
-  createdBy: {
-    name: string;
-  };
+  createdBy: { name: string };
 }
 
-export function ApiKeysPage() {
+const STATUS_ERRORS: Record<number, string> = {
+  401: 'Your session expired. Please sign in again.',
+  403: 'You do not have permission to manage API keys for this organization.',
+  404: 'API key or organization not found.',
+};
+
+async function request(url: string, method: string, organizationId?: string) {
+  const token = localStorage.getItem('auth_token');
+  const response = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    credentials: 'include',
+    body: organizationId ? JSON.stringify({ organizationId }) : undefined,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(STATUS_ERRORS[response.status] || data?.message || 'Request failed');
+  }
+  return response.json().catch(() => null);
+}
+
+function keyState(key: ApiKey): { label: string; cls: string } {
+  if (!key.isActive) return { label: 'Revoked', cls: 'bg-red-50 text-red-700 ring-red-200' };
+  if (key.expiresAt && new Date(key.expiresAt) < new Date()) return { label: 'Expired', cls: 'bg-amber-50 text-amber-700 ring-amber-200' };
+  return { label: 'Active', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200' };
+}
+
+function ApiKeysPage() {
   const { organizationId } = Route.useParams();
+  const confirm = useConfirm();
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [refreshedKey, setRefreshedKey] = useState<string | null>(null);
-  const [refreshedKeyName, setRefreshedKeyName] = useState<string>('');
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [refreshed, setRefreshed] = useState<{ key: string; name: string } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const loadApiKeys = async () => {
+  const loadApiKeys = useCallback(async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch(`/api/api-keys/organization/${organizationId}`, {
-        credentials: 'include',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        const message = errorData?.message || 'Failed to load API keys';
-
-        if (response.status === 401) {
-          toast.error('Unauthorized. Please log in again.');
-        } else if (response.status === 403) {
-          toast.error('You do not have permission to view API keys for this organization');
-        } else if (response.status === 404) {
-          toast.error('Organization not found');
-        } else {
-          toast.error(message);
-        }
-        return;
-      }
-
-      const data = await response.json();
-      setApiKeys(data);
-    } catch (error) {
-      toast.error('Network error. Please check your connection.');
-      console.error(error);
+      setApiKeys(await request(`/api/api-keys/organization/${organizationId}`, 'GET'));
+    } catch (error: any) {
+      toast.error(error.message);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [organizationId]);
 
   useEffect(() => {
     loadApiKeys();
-  }, [organizationId]);
+  }, [loadApiKeys]);
 
-  const handleRevoke = async (id: string) => {
-    if (!confirm('Are you sure you want to revoke this API key? It will no longer work.')) {
-      return;
-    }
-
+  const run = async (id: string, action: () => Promise<void>) => {
+    setBusyId(id);
     try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch(`/api/api-keys/${id}/revoke`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({ organizationId }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        const message = errorData?.message || 'Failed to revoke API key';
-
-        if (response.status === 404) {
-          toast.error('API key not found or already deleted');
-        } else if (response.status === 403) {
-          toast.error('You do not have permission to revoke this API key');
-        } else {
-          toast.error(message);
-        }
-        return;
-      }
-
-      toast.success('API key revoked successfully');
-      loadApiKeys();
-    } catch (error) {
-      toast.error('Network error. Please try again.');
-      console.error(error);
+      await action();
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch(`/api/api-keys/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({ organizationId }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        const message = errorData?.message || 'Failed to delete API key';
-
-        if (response.status === 404) {
-          toast.error('API key not found or already deleted');
-        } else if (response.status === 403) {
-          toast.error('You do not have permission to delete this API key');
-        } else {
-          toast.error(message);
-        }
-        return;
-      }
-
-      toast.success('API key deleted successfully');
+  const handleRefresh = async (key: ApiKey) => {
+    const ok = await confirm({
+      title: `Regenerate "${key.name}"?`,
+      message: 'The current key stops working immediately. Update every app that uses it.',
+      confirmText: 'Regenerate key',
+    });
+    if (!ok) return;
+    run(key.id, async () => {
+      const data = await request(`/api/api-keys/${key.id}/refresh`, 'PATCH', organizationId);
+      setRefreshed({ key: data.plainKey, name: key.name });
+      toast.success('API key regenerated');
       loadApiKeys();
-    } catch (error) {
-      toast.error('Network error. Please try again.');
-      console.error(error);
-    }
+    });
   };
 
-  const handleRefresh = async (id: string, name: string) => {
-    if (!confirm('Are you sure you want to refresh this API key? The old key will stop working immediately.')) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch(`/api/api-keys/${id}/refresh`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({ organizationId }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        const message = errorData?.message || 'Failed to refresh API key';
-
-        if (response.status === 404) {
-          toast.error('API key not found or already deleted');
-        } else if (response.status === 403) {
-          toast.error('You do not have permission to refresh this API key');
-        } else {
-          toast.error(message);
-        }
-        return;
-      }
-
-      const data = await response.json();
-      setRefreshedKey(data.plainKey);
-      setRefreshedKeyName(name);
-      toast.success('API key refreshed successfully');
+  const handleRevoke = async (key: ApiKey) => {
+    const ok = await confirm({
+      title: `Revoke "${key.name}"?`,
+      message: 'Requests using this key will be rejected. You can still delete it afterwards.',
+      confirmText: 'Revoke key',
+    });
+    if (!ok) return;
+    run(key.id, async () => {
+      await request(`/api/api-keys/${key.id}/revoke`, 'PATCH', organizationId);
+      toast.success('API key revoked');
       loadApiKeys();
-    } catch (error) {
-      toast.error('Network error. Please try again.');
-      console.error(error);
-    }
+    });
   };
+
+  const handleDelete = async (key: ApiKey) => {
+    const ok = await confirm({
+      title: `Delete "${key.name}"?`,
+      message: 'This permanently removes the key. This action cannot be undone.',
+      confirmText: 'Delete key',
+    });
+    if (!ok) return;
+    run(key.id, async () => {
+      await request(`/api/api-keys/${key.id}`, 'DELETE', organizationId);
+      toast.success('API key deleted');
+      loadApiKeys();
+    });
+  };
+
+  const actions = (key: ApiKey) => (
+    <div className="flex items-center gap-1">
+      {key.isActive && (
+        <>
+          <button className="btn btn-ghost btn-sm" disabled={busyId === key.id} onClick={() => handleRefresh(key)} title="Regenerate key">
+            <RefreshCw /> Regenerate
+          </button>
+          <button className="btn btn-ghost btn-sm text-amber-700 hover:bg-amber-50" disabled={busyId === key.id} onClick={() => handleRevoke(key)} title="Revoke">
+            <Ban /> Revoke
+          </button>
+        </>
+      )}
+      <button className="btn btn-danger-ghost btn-sm btn-icon" disabled={busyId === key.id} onClick={() => handleDelete(key)} title="Delete" aria-label={`Delete ${key.name}`}>
+        <Trash2 />
+      </button>
+    </div>
+  );
 
   return (
-    <div className="p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">API Keys</h1>
-            <p className="text-gray-600 mt-2">Manage API keys for programmatic access to your content</p>
-          </div>
-          <Button
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-            onPress={() => setIsCreateModalOpen(true)}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create API Key
-          </Button>
-        </div>
-
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Key className="w-5 h-5" />
-            <h2 className="text-xl font-semibold">Your API Keys</h2>
-          </div>
-
-          {isLoading ? (
-            <div className="text-center py-8 text-gray-500">Loading...</div>
-          ) : apiKeys.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No API keys yet. Create one to get started.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">NAME</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">STATUS</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">EXPIRATION</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">LAST USED</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">CREATED</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {apiKeys.map((key) => (
-                    <tr key={key.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-4">
-                        <div>
-                          <p className="font-medium">{key.name}</p>
-                          <p className="text-sm text-gray-500">
-                            Created by {key.createdBy?.name || 'Unknown'}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${key.isActive
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                          }`}>
-                          {key.isActive ? 'Active' : 'Revoked'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-sm">
-                        {key.expiresAt ? (
-                          new Date(key.expiresAt) < new Date() ? (
-                            <span className="text-red-600 font-medium">Expired</span>
-                          ) : (
-                            <span className="text-gray-600">{new Date(key.expiresAt).toLocaleDateString()}</span>
-                          )
-                        ) : (
-                          <span className="text-gray-500">Never</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-600">
-                        {key.lastUsedAt
-                          ? new Date(key.lastUsedAt).toLocaleDateString()
-                          : 'Never'}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-600">
-                        {new Date(key.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex gap-2">
-                          {key.isActive && (
-                            <>
-                              <Button
-                                size="sm"
-                                className="bg-blue-100 hover:bg-blue-200 text-blue-700"
-                                onPress={() => handleRefresh(key.id, key.name)}
-                              >
-                                <RefreshCw className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                className="bg-orange-100 hover:bg-orange-200 text-orange-700"
-                                onPress={() => handleRevoke(key.id)}
-                              >
-                                Revoke
-                              </Button>
-                            </>
-                          )}
-                          <Button
-                            size="sm"
-                            className="bg-red-100 hover:bg-red-200 text-red-700"
-                            onPress={() => handleDelete(key.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        <Card className="p-6 bg-blue-50 border border-blue-200">
-          <div className="space-y-2">
-            <h3 className="font-semibold text-blue-900">🔒 Security Best Practices</h3>
-            <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-              <li>Keep your API keys secure and never share them publicly</li>
-              <li>Use different API keys for different environments (development, production)</li>
-              <li>Refresh API keys immediately if they are compromised</li>
-              <li>Set expiration dates for better security and compliance</li>
-              <li>Regularly rotate your API keys using the refresh button</li>
-              <li>Monitor API key usage through the "Last Used" column</li>
-            </ul>
-          </div>
-        </Card>
-      </div>
-
-      <CreateApiKeyModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onCreated={loadApiKeys}
-        organizationId={organizationId}
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      <PageHeader
+        back={{ to: '/organizations/$organizationId/settings', params: { organizationId }, label: 'Organization settings' }}
+        title="API keys"
+        description="Keys let your websites read published content through the public API."
+        actions={
+          <button className="btn btn-primary" onClick={() => setIsCreateOpen(true)}>
+            <Plus /> Create API key
+          </button>
+        }
       />
 
-      {/* Refreshed Key Modal */}
-      {refreshedKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => setRefreshedKey(null)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-xl font-semibold">API Key Refreshed</h2>
-              <button onClick={() => setRefreshedKey(null)} className="p-1 hover:bg-gray-100 rounded">
-                <span className="text-xl">×</span>
-              </button>
-            </div>
-            <div className="px-6 py-4">
-              <div className="space-y-4">
-                <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                  <p className="text-sm text-orange-800 font-semibold mb-2">
-                    ⚠️ Important: Save this new key now!
-                  </p>
-                  <p className="text-sm text-orange-700">
-                    The old key for "{refreshedKeyName}" has been invalidated. Save this new key before closing.
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    New API Key
-                  </label>
-                  <div className="relative">
-                    <input
-                      value={refreshedKey}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm pr-12 bg-gray-50"
-                    />
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(refreshedKey);
-                        toast.success('New API key copied to clipboard');
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-gray-200 rounded"
-                    >
-                      📋
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="px-6 py-4 bg-gray-50 border-t flex justify-end">
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-                onPress={() => setRefreshedKey(null)}
-              >
-                Done
-              </Button>
-            </div>
+      <div className="surface overflow-hidden">
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
           </div>
+        ) : apiKeys.length === 0 ? (
+          <div className="mx-auto max-w-sm px-4 py-14 text-center">
+            <span className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Key className="h-6 w-6" />
+            </span>
+            <h3 className="text-base font-semibold text-gray-900">No API keys yet</h3>
+            <p className="mt-1 text-sm text-gray-500">Create a key to fetch content from your website or app.</p>
+            <button className="btn btn-primary btn-sm mt-5" onClick={() => setIsCreateOpen(true)}>
+              <Plus /> Create API key
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <table className="hidden w-full text-sm md:table">
+              <thead className="border-b border-gray-100 bg-gray-50/70 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
+                <tr>
+                  <th className="px-5 py-2.5">Name</th>
+                  <th className="px-3 py-2.5">Status</th>
+                  <th className="px-3 py-2.5">Expires</th>
+                  <th className="px-3 py-2.5">Last used</th>
+                  <th className="px-5 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {apiKeys.map((key) => {
+                  const state = keyState(key);
+                  return (
+                    <tr key={key.id} className="hover:bg-gray-50/70">
+                      <td className="px-5 py-3.5">
+                        <p className="font-medium text-gray-900">{key.name}</p>
+                        <p className="text-xs text-gray-500">
+                          Created {formatDate(key.createdAt)} by {key.createdBy?.name || 'Unknown'}
+                        </p>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${state.cls}`}>{state.label}</span>
+                      </td>
+                      <td className="px-3 py-3.5 text-gray-600">{key.expiresAt ? formatDate(key.expiresAt) : 'Never'}</td>
+                      <td className="px-3 py-3.5 text-gray-600">{key.lastUsedAt ? formatDate(key.lastUsedAt) : 'Never'}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex justify-end">{actions(key)}</div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Mobile list */}
+            <ul className="divide-y divide-gray-100 md:hidden">
+              {apiKeys.map((key) => {
+                const state = keyState(key);
+                return (
+                  <li key={key.id} className="space-y-2 px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-gray-900">{key.name}</p>
+                        <p className="text-xs text-gray-500">by {key.createdBy?.name || 'Unknown'} · {formatDate(key.createdAt)}</p>
+                      </div>
+                      <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${state.cls}`}>{state.label}</span>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Expires {key.expiresAt ? formatDate(key.expiresAt) : 'never'} · Last used {key.lastUsedAt ? formatDate(key.lastUsedAt) : 'never'}
+                    </p>
+                    <div className="-ml-2">{actions(key)}</div>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </div>
+
+      <div className="mt-6 flex gap-3 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-600">
+        <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+        <div>
+          <p className="font-medium text-gray-900">Keep keys safe</p>
+          <p className="mt-0.5">
+            Never put keys in public code. Use a separate key per environment, set an expiration, and regenerate a key right away if it leaks.
+          </p>
         </div>
-      )}
+      </div>
+
+      <CreateApiKeyModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onCreated={loadApiKeys} organizationId={organizationId} />
+
+      <Modal
+        open={!!refreshed}
+        onClose={() => setRefreshed(null)}
+        dismissible={false}
+        title="New key generated"
+        footer={
+          <button className="btn btn-primary" onClick={() => setRefreshed(null)}>
+            I&apos;ve saved it
+          </button>
+        }
+      >
+        {refreshed && <KeyReveal value={refreshed.key} warning={`The old key for "${refreshed.name}" no longer works and this one will not be shown again.`} />}
+      </Modal>
     </div>
   );
 }

@@ -76,7 +76,7 @@ export default function Layout() {
             <nav className="sticky top-0 z-30 border-b border-gray-200 bg-white/85 backdrop-blur-md">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="flex h-16 items-center justify-between gap-4">
-                        <div className="flex min-w-0 items-center gap-6">
+                        <div className="flex min-w-0 items-center gap-4 xl:gap-6">
                             <Link to="/" className="flex shrink-0 items-center gap-2.5">
                                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 shadow-sm">
                                     <FolderKanban className="h-4.5 w-4.5 text-white" />
@@ -106,13 +106,13 @@ export default function Layout() {
                                         title="What's new"
                                     >
                                         <Megaphone />
-                                        <span className="hidden sm:inline">What&apos;s new</span>
+                                        <span className="hidden xl:inline">What&apos;s new</span>
                                     </button>
                                     <div className="flex items-center gap-2.5">
-                                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
+                                        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white" title={`${user.name} · ${user.email}`}>
                                             {initials}
                                         </span>
-                                        <div className="hidden leading-tight sm:block">
+                                        <div className="hidden leading-tight 2xl:block">
                                             <p className="text-sm font-medium text-gray-900">{user.name}</p>
                                             <p className="text-xs text-gray-500">{user.email}</p>
                                         </div>

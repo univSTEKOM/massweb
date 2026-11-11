@@ -1,6 +1,7 @@
-import { Button, Input, Card } from '@heroui/react'
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { Loader2, UserPlus } from 'lucide-react'
+import { Modal } from '../Modal'
+import { PasswordField } from '../AuthShell'
 
 interface CreateUserModalProps {
     isOpen: boolean
@@ -8,86 +9,76 @@ interface CreateUserModalProps {
     onSave: (data: { email: string; password: string; name: string; isSuperAdmin: boolean }) => Promise<void>
 }
 
+const EMPTY = { email: '', password: '', name: '', isSuperAdmin: false }
+
 export function CreateUserModal({ isOpen, onClose, onSave }: CreateUserModalProps) {
-    const [formData, setFormData] = useState({
-        email: '',
-        password: '',
-        name: '',
-        isSuperAdmin: false,
-    })
+    const [formData, setFormData] = useState(EMPTY)
     const [isLoading, setIsLoading] = useState(false)
 
-    const handleSave = async () => {
+    const valid = formData.name.trim() && formData.email.trim() && formData.password.length >= 8
+
+    const close = () => {
+        setFormData(EMPTY)
+        onClose()
+    }
+
+    const handleSubmit = async () => {
+        if (!valid) return
         setIsLoading(true)
         try {
-            await onSave(formData)
-            setFormData({ email: '', password: '', name: '', isSuperAdmin: false })
-            onClose()
+            await onSave({ ...formData, name: formData.name.trim(), email: formData.email.trim() })
+            close()
+        } catch {
+            // the caller shows the error; keep the form open
         } finally {
             setIsLoading(false)
         }
     }
 
-    if (!isOpen) return null
-
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <Card className="w-full max-w-lg p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold">Create New User</h3>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-                        <X className="w-5 h-5" />
+        <Modal
+            open={isOpen}
+            onClose={close}
+            title="Add user"
+            description="Create an account. Add the user to organizations afterwards."
+            footer={
+                <>
+                    <button className="btn btn-secondary" onClick={close}>Cancel</button>
+                    <button className="btn btn-primary" onClick={handleSubmit} disabled={!valid || isLoading}>
+                        {isLoading ? <Loader2 className="animate-spin" /> : <UserPlus />}
+                        Create user
                     </button>
+                </>
+            }
+        >
+            <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                    e.preventDefault()
+                    handleSubmit()
+                }}
+            >
+                <div>
+                    <label className="label" htmlFor="cu-name">Full name</label>
+                    <input id="cu-name" className="field" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} autoFocus />
                 </div>
-                <div className="space-y-4">
-                    <Input
-                        label="Full Name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="Enter full name"
-                        fullWidth
-                        required
-                    />
-                    <Input
-                        label="Email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        placeholder="Enter email address"
-                        fullWidth
-                        required
-                    />
-                    <Input
-                        label="Password"
-                        type="password"
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        placeholder="Enter password (min 8 characters)"
-                        fullWidth
-                        required
-                    />
-                    <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <input
-                            type="checkbox"
-                            id="superadmin"
-                            checked={formData.isSuperAdmin}
-                            onChange={(e) => setFormData({ ...formData, isSuperAdmin: e.target.checked })}
-                            className="w-4 h-4"
-                        />
-                        <label htmlFor="superadmin" className="text-sm cursor-pointer">
-                            Make this user a Super Admin
-                        </label>
-                    </div>
+                <div>
+                    <label className="label" htmlFor="cu-email">Email</label>
+                    <input id="cu-email" type="email" className="field" placeholder="user@example.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
                 </div>
-                <div className="flex gap-2 mt-6 justify-end">
-                    <Button onClick={onClose} variant="ghost">
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSave} className="bg-blue-600 text-white" isLoading={isLoading}>
-                        Create User
-                    </Button>
+                <div>
+                    <label className="label" htmlFor="cu-password">Password</label>
+                    <PasswordField id="cu-password" autoComplete="new-password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
+                    <p className={`hint ${formData.password && formData.password.length < 8 ? 'text-red-600' : ''}`}>At least 8 characters.</p>
                 </div>
-            </Card>
-        </div>
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3">
+                    <input type="checkbox" className="checkbox mt-0.5" checked={formData.isSuperAdmin} onChange={(e) => setFormData({ ...formData, isSuperAdmin: e.target.checked })} />
+                    <span>
+                        <span className="block text-sm font-medium text-gray-900">Super admin</span>
+                        <span className="block text-xs text-gray-500">Full access to every organization, user and job.</span>
+                    </span>
+                </label>
+            </form>
+        </Modal>
     )
 }

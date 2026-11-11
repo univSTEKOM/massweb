@@ -1,6 +1,6 @@
+import toast from 'react-hot-toast';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
 import { useState, useRef } from 'react';
-import { Button } from '@heroui/react';
 
 interface ThumbnailUploadProps {
     currentUrl?: string;
@@ -19,13 +19,13 @@ export function ThumbnailUpload({ currentUrl, onUpload, onRemove }: ThumbnailUpl
 
         // Validate file type
         if (!file.type.startsWith('image/')) {
-            alert('Please select an image file');
+            toast.error('Please select an image file');
             return;
         }
 
         // Validate file size (5MB)
         if (file.size > 5 * 1024 * 1024) {
-            alert('File size must not exceed 5MB');
+            toast.error('File size must not exceed 5MB');
             return;
         }
 
@@ -42,7 +42,7 @@ export function ThumbnailUpload({ currentUrl, onUpload, onRemove }: ThumbnailUpl
             await onUpload(file);
         } catch (error) {
             setPreview(currentUrl || null);
-            alert('Failed to upload thumbnail');
+            toast.error('Failed to upload thumbnail');
         } finally {
             setIsUploading(false);
         }
@@ -56,7 +56,7 @@ export function ThumbnailUpload({ currentUrl, onUpload, onRemove }: ThumbnailUpl
             await onRemove();
             setPreview(null);
         } catch (error) {
-            alert('Failed to remove thumbnail');
+            toast.error('Failed to remove thumbnail');
         } finally {
             setIsUploading(false);
         }
