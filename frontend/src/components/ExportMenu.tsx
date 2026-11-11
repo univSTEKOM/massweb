@@ -1,4 +1,3 @@
-import { Button } from '@heroui/react'
 import { FileJson, FileSpreadsheet, FileArchive } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
@@ -49,37 +48,26 @@ export function ExportMenu({ projectId, projectName, totalContents }: ExportMenu
         }
     }
 
+    const items: { format: 'csv' | 'json' | 'html-zip'; label: string; icon: React.ReactNode }[] = [
+        { format: 'csv', label: 'CSV', icon: <FileSpreadsheet /> },
+        { format: 'json', label: 'JSON', icon: <FileJson /> },
+        { format: 'html-zip', label: 'HTML ZIP', icon: <FileArchive /> },
+    ]
+
     return (
         <div className="flex flex-wrap gap-2">
-            <Button
-                size="sm"
-                className="bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => handleExport('csv')}
-                isDisabled={!!exporting || totalContents === 0}
-            >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                {exporting === 'csv' ? 'Exporting...' : 'Export CSV'}
-            </Button>
-
-            <Button
-                size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => handleExport('json')}
-                isDisabled={!!exporting || totalContents === 0}
-            >
-                <FileJson className="w-4 h-4 mr-2" />
-                {exporting === 'json' ? 'Exporting...' : 'Export JSON'}
-            </Button>
-
-            <Button
-                size="sm"
-                className="bg-purple-600 hover:bg-purple-700 text-white"
-                onClick={() => handleExport('html-zip')}
-                isDisabled={!!exporting || totalContents === 0}
-            >
-                <FileArchive className="w-4 h-4 mr-2" />
-                {exporting === 'html-zip' ? 'Exporting...' : 'Export HTML ZIP'}
-            </Button>
+            {items.map((item) => (
+                <button
+                    key={item.format}
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleExport(item.format)}
+                    disabled={!!exporting || totalContents === 0}
+                    title={`Export as ${item.label}`}
+                >
+                    {item.icon}
+                    {exporting === item.format ? 'Exporting...' : item.label}
+                </button>
+            ))}
         </div>
     )
 }

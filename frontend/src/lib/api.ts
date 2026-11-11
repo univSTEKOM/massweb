@@ -98,10 +98,17 @@ export interface Project {
     updatedAt: string;
 }
 
+export type PublishStatus = 'draft' | 'pending' | 'published' | 'failed';
+
+/** Statuses a user can move content to manually. */
+export type ManualPublishStatus = 'draft' | 'pending' | 'published';
+
 export interface ProjectStats {
     totalContents: number;
     publishedContents: number;
     pendingContents: number;
+    draftContents: number;
+    failedContents: number;
 }
 
 export interface CsvColumn {
@@ -128,15 +135,9 @@ export interface GeneratedContent {
     tags?: string;
     thumbnailUrl?: string;
     slug: string;
-    publishStatus: 'pending' | 'published' | 'failed';
+    publishStatus: PublishStatus;
     publishedAt?: string;
     createdAt: string;
-}
-
-export interface ProjectStats {
-    totalContents: number;
-    publishedContents: number;
-    pendingContents: number;
 }
 
 // Projects API
@@ -190,10 +191,11 @@ export const uploadsApi = {
 };
 
 export const contentApi = {
-    generate: (projectId: string) => api.post<{ jobId: string; totalRows: number }>(`/content-generator/projects/${projectId}/generate`),
-    generateSync: (projectId: string) => api.post<{ generatedCount: number }>(
+    generate: (projectId: string, options: { asDraft?: boolean } = {}) =>
+        api.post<{ jobId: string; totalRows: number }>(`/content-generator/projects/${projectId}/generate`, options),
+    generateSync: (projectId: string, options: { asDraft?: boolean } = {}) => api.post<{ generatedCount: number }>(
         `/content-generator/projects/${projectId}/generate-sync`,
-        {},
+        options,
         { timeout: 300000 } // 5 minutes for large content generation
     ),
     getContents: (projectId: string, page: number = 1, limit: number = 20, status?: string, search?: string) =>
@@ -208,6 +210,14 @@ export const contentApi = {
     getById: (id: string) => api.get<GeneratedContent>(`/content-generator/contents/${id}`),
     update: (id: string, data: Partial<GeneratedContent>) => api.put<GeneratedContent>(`/content-generator/contents/${id}`, data),
     delete: (id: string) => api.delete(`/content-generator/contents/${id}`),
+    /** Manual status change for selected items. 'published' goes live immediately (outside the auto-publish queue). */
+    bulkStatus: (contentIds: string[], status: ManualPublishStatus) =>
+        api.post<{ updated: number }>(`/content-generator/contents/bulk-status`, { contentIds, status }),
+    bulkDelete: (contentIds: string[]) =>
+        api.post<{ deleted: number }>(`/content-generator/contents/bulk-delete`, { contentIds }),
+    /** Mass status change for a whole project, e.g. all pending -> draft. */
+    projectBulkStatus: (projectId: string, from: PublishStatus, to: ManualPublishStatus) =>
+        api.post<{ updated: number }>(`/content-generator/projects/${projectId}/bulk-status`, { from, to }),
     publish: (projectId: string, delaySeconds?: number) => api.post<{ jobId: string }>(`/content-generator/projects/${projectId}/publish`, { delaySeconds }),
     publishSync: (projectId: string, delaySeconds?: number) => api.post<{ published: number }>(`/content-generator/projects/${projectId}/publish-sync`, { delaySeconds }),
     unpublish: (contentIds: string[]) => api.post<{ unpublished: number }>(`/content-generator/contents/unpublish`, { contentIds }),
@@ -240,6 +250,7 @@ export const contentApi = {
             totalContent: number;
             publishedContent: number;
             pendingContent: number;
+            draftContent: number;
             failedContent: number;
             activeJobs: number;
             completedJobsToday: number;

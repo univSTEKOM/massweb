@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { projectsApi, csvApi, contentApi, categoriesApi } from '../../lib/api'
 import type { Category } from '../../lib/api'
-import { Button, Card } from '@heroui/react'
 import { useDropzone } from 'react-dropzone'
-import { Upload, Sparkles, Copy, Building2, Tag, Plus } from 'lucide-react'
+import { Upload, Sparkles, Copy, Building2, Tag, Plus, FileEdit, Clock } from 'lucide-react'
+import { PageHeader } from '../../components/ui'
 import { RichTextEditor } from '../../components/RichTextEditor'
 import { ThumbnailUpload } from '../../components/ThumbnailUpload'
 import { useOrganization } from '../../contexts/organization-context'
@@ -36,6 +36,8 @@ function CreateProjectPage() {
         slugTemplate: '',
     })
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
+    // Save generated articles as drafts (manual publish) instead of the auto-publish queue
+    const [generateAsDraft, setGenerateAsDraft] = useState(false)
     const [csvFile, setCsvFile] = useState<File | null>(null)
     const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
     const [csvColumns, setCsvColumns] = useState<string[]>([])
@@ -124,7 +126,7 @@ function CreateProjectPage() {
                 console.log('Starting generation...')
                 // Use synchronous generation (no Redis required)
                 const result = await Promise.race([
-                    contentApi.generateSync(project.id),
+                    contentApi.generateSync(project.id, { asDraft: generateAsDraft }),
                     new Promise((_, reject) =>
                         setTimeout(() => reject(new Error('Generation timed out after 5 minutes')), 300000)
                     )
@@ -220,18 +222,15 @@ function CreateProjectPage() {
     }
 
     return (
-        <div className="container mx-auto px-4 py-8 max-w-7xl">
-            <div className="mb-8">
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                    Create New Project
-                </h1>
-                <p className="text-gray-600 dark:text-gray-400 mt-2">
-                    Set up your mass marketing SEO campaign
-                </p>
-            </div>
+        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+            <PageHeader
+                back={{ to: '/projects', label: 'Projects' }}
+                title="Create new project"
+                description="Set up your mass marketing SEO campaign"
+            />
 
             {errors.length > 0 && (
-                <Card className="p-4 mb-6 bg-red-50 border border-red-200">
+                <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm">
                     <div className="space-y-2">
                         {errors.map((error, index) => (
                             <div key={index} className="flex items-start gap-2 text-red-700">
@@ -240,25 +239,25 @@ function CreateProjectPage() {
                             </div>
                         ))}
                     </div>
-                </Card>
+                </div>
             )}
 
             {successMessage && (
-                <Card className="p-4 mb-6 bg-green-50 border border-green-200">
+                <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
                     <div className="flex items-center gap-2 text-green-700">
                         <span className="text-green-500 font-bold">✓</span>
                         <span>{successMessage}</span>
                     </div>
-                </Card>
+                </div>
             )}
 
             <div className="space-y-6">
-                <Card className="p-6">
-                    <h2 className="text-2xl font-bold mb-4">Project Details</h2>
+                <div className="surface p-5 sm:p-6">
+                    <h2 className="mb-5 text-lg font-semibold tracking-tight text-gray-900">Project Details</h2>
                     <div className="space-y-4">
                         {/* Current Organization Display */}
                         <div>
-                            <label className="block text-sm font-medium mb-2">
+                            <label className="label">
                                 Organization
                             </label>
                             {currentOrganization ? (
@@ -275,34 +274,34 @@ function CreateProjectPage() {
                                     </p>
                                 </div>
                             )}
-                            <p className="text-xs text-gray-500 mt-1">Project will be created in this organization</p>
+                            <p className="hint">Project will be created in this organization</p>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium mb-2">
+                            <label className="label">
                                 Project Name <span className="text-red-500">*</span>
                             </label>
                             <input
                                 type="text"
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="field"
                                 placeholder="My SEO Campaign"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
 
                             />
-                            <p className="text-xs text-gray-500 mt-1">Give your project a descriptive name</p>
+                            <p className="hint">Give your project a descriptive name</p>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-2">Description</label>
+                            <label className="label">Description</label>
                             <textarea
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="field"
                                 placeholder="Describe your project..."
                                 rows={3}
                                 value={formData.description}
                                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
 
                             />
-                            <p className="text-xs text-gray-500 mt-1">Optional project description</p>
+                            <p className="hint">Optional project description</p>
                         </div>
 
                         {/* Thumbnail Upload */}
@@ -321,7 +320,8 @@ function CreateProjectPage() {
                                 <label className="block text-sm font-medium">Categories</label>
                                 {currentOrganization && (
                                     <Link
-                                        to={`/organizations/${currentOrganization.id}/categories`}
+                                        to="/organizations/$organizationId/categories"
+                                        params={{ organizationId: currentOrganization.id }}
                                         className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
                                     >
                                         <Plus className="w-3 h-3" />
@@ -354,7 +354,8 @@ function CreateProjectPage() {
                                     <p className="text-sm text-gray-500">No categories available</p>
                                     {currentOrganization && (
                                         <Link
-                                            to={`/organizations/${currentOrganization.id}/categories`}
+                                            to="/organizations/$organizationId/categories"
+                                        params={{ organizationId: currentOrganization.id }}
                                             className="text-sm text-blue-600 hover:text-blue-700"
                                         >
                                             Create categories
@@ -362,13 +363,13 @@ function CreateProjectPage() {
                                     )}
                                 </div>
                             )}
-                            <p className="text-xs text-gray-500 mt-1">Select categories to organize this project</p>
+                            <p className="hint">Select categories to organize this project</p>
                         </div>
                     </div>
-                </Card>
+                </div>
 
-                <Card className="p-6">
-                    <h2 className="text-2xl font-bold mb-4">
+                <div className="surface p-5 sm:p-6">
+                    <h2 className="mb-5 text-lg font-semibold tracking-tight text-gray-900">
                         Upload Data File
                         {csvFile && <span className="text-sm font-normal text-green-600 ml-2">✓ File uploaded</span>}
                     </h2>
@@ -405,10 +406,10 @@ function CreateProjectPage() {
                             </p>
                         </div>
                     )}
-                </Card>
+                </div>
 
-                <Card className="p-6">
-                    <h2 className="text-2xl font-bold mb-2">HTML Template</h2>
+                <div className="surface p-5 sm:p-6">
+                    <h2 className="mb-1 text-lg font-semibold tracking-tight text-gray-900">HTML Template</h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                         Use variables like <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded">{'{{columnName}}'}</code> to insert CSV data.
                         {csvColumns.length > 0 && ' Click variable chips below to copy them.'}
@@ -451,16 +452,16 @@ function CreateProjectPage() {
 
                     <div className="space-y-4 mt-4">
                         <div>
-                            <label className="block text-sm font-medium mb-2">Title Template</label>
+                            <label className="label">Title Template</label>
                             <input
                                 type="text"
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="field"
                                 placeholder="{{title}} - My Site"
                                 value={formData.titleTemplate}
                                 onChange={(e) => setFormData({ ...formData, titleTemplate: e.target.value })}
 
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="hint">
                                 Used for page title and SEO. <strong>Columns in this template determine content combinations.</strong> Slug will be generated from the title.
                                 {csvColumns.length > 0 && (
                                     <span className="text-blue-600 font-medium">
@@ -470,58 +471,70 @@ function CreateProjectPage() {
                             </p>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-2">Meta Description Template</label>
+                            <label className="label">Meta Description Template</label>
                             <textarea
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="field"
                                 placeholder="{{description}}"
                                 rows={2}
                                 value={formData.metaDescriptionTemplate}
                                 onChange={(e) => setFormData({ ...formData, metaDescriptionTemplate: e.target.value })}
 
                             />
-                            <p className="text-xs text-gray-500 mt-1">SEO meta description (150-160 chars recommended)</p>
+                            <p className="hint">SEO meta description (150-160 chars recommended)</p>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-2">Tags Template</label>
+                            <label className="label">Tags Template</label>
                             <input
                                 type="text"
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="field"
                                 placeholder="{{category}}, {{type}}, SEO"
                                 value={formData.tagsTemplate}
                                 onChange={(e) => setFormData({ ...formData, tagsTemplate: e.target.value })}
 
                             />
-                            <p className="text-xs text-gray-500 mt-1">Comma-separated tags for content organization</p>
+                            <p className="hint">Comma-separated tags for content organization</p>
                         </div>
                     </div>
-                </Card>
+                </div>
 
-                <div className="flex gap-4 justify-end">
-                    <Button
-                        size="lg"
-                        className="bg-gray-200 hover:bg-gray-300 text-gray-800"
-                        onClick={() => navigate({ to: '/projects' })}
-                    >
+                <div className="surface p-5 sm:p-6">
+                    <h2 className="mb-1 text-lg font-semibold tracking-tight text-gray-900">After generating</h2>
+                    <p className="mb-4 text-sm text-gray-500">Choose where the generated articles go.</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {[
+                            { draft: false, icon: <Clock className="h-4 w-4" />, title: 'Publish queue', desc: 'Ready for Auto Publish (published one by one with a delay).' },
+                            { draft: true, icon: <FileEdit className="h-4 w-4" />, title: 'Save as drafts', desc: 'Kept private. Review them, then publish manually when ready.' },
+                        ].map((opt) => (
+                            <button
+                                key={String(opt.draft)}
+                                type="button"
+                                onClick={() => setGenerateAsDraft(opt.draft)}
+                                className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${generateAsDraft === opt.draft ? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-500/15' : 'border-gray-200 hover:border-gray-300'}`}
+                            >
+                                <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${generateAsDraft === opt.draft ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                                    {opt.icon}
+                                </span>
+                                <span>
+                                    <span className="block text-sm font-semibold text-gray-900">{opt.title}</span>
+                                    <span className="mt-0.5 block text-sm text-gray-500">{opt.desc}</span>
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                    <button className="btn btn-secondary btn-lg" onClick={() => navigate({ to: '/projects' })}>
                         Cancel
-                    </Button>
-                    <Button
-                        size="lg"
-                        className={`text-white ${!formData.name || createProjectMutation.isPending
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-blue-600 hover:bg-blue-700'
-                            }`}
+                    </button>
+                    <button
+                        className="btn btn-primary btn-lg"
                         onClick={handleSubmit}
-                        isDisabled={!formData.name || createProjectMutation.isPending}
+                        disabled={!formData.name || createProjectMutation.isPending}
                     >
-                        {createProjectMutation.isPending ? (
-                            <>Processing...</>
-                        ) : (
-                            <>
-                                <Sparkles className="w-5 h-5 mr-2" />
-                                Create & Generate
-                            </>
-                        )}
-                    </Button>
+                        <Sparkles />
+                        {createProjectMutation.isPending ? 'Processing...' : generateAsDraft ? 'Create & generate drafts' : 'Create & generate'}
+                    </button>
                 </div>
             </div>
         </div>

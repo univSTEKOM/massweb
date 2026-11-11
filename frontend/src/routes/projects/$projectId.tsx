@@ -1,13 +1,16 @@
 import { createFileRoute, Link, redirect } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
-import { projectsApi, contentApi, type GeneratedContent } from '../../lib/api'
-import { Button, Card, Spinner } from '@heroui/react'
-import { ArrowLeft, Sparkles, Eye, Trash2, CheckSquare, Square, RotateCcw, Book, Search } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Spinner } from '@heroui/react'
+import { Book, CheckCircle2, Clock, FileEdit, FileText, Search, Sparkles } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { projectsApi, contentApi, type PublishStatus } from '../../lib/api'
 import { ExportMenu } from '../../components/ExportMenu'
 import { PublishJobControl } from '../../components/PublishJobControl'
-import toast from 'react-hot-toast'
+import { ManualPublishPanel } from '../../components/ManualPublishPanel'
+import { ContentTable, ContentBulkBar } from '../../components/ContentTable'
+import { PageHeader, Pagination, StatTile, formatNumber } from '../../components/ui'
+import { toggleInSet } from '../../lib/content-actions'
 
 export const Route = createFileRoute('/projects/$projectId')({
     component: ProjectDetailPage,
@@ -19,421 +22,253 @@ export const Route = createFileRoute('/projects/$projectId')({
     },
 })
 
+type Tab = 'all' | Extract<PublishStatus, 'draft' | 'pending' | 'published'>
+
 function ProjectDetailPage() {
     const { projectId } = Route.useParams()
     const queryClient = useQueryClient()
     const [page, setPage] = useState(1)
-    const [statusFilter, setStatusFilter] = useState<string>('all')
+    const [tab, setTab] = useState<Tab>('all')
     const [searchQuery, setSearchQuery] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
-    const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
-    const [bulkPublishDelay, setBulkPublishDelay] = useState(3)
+    const [selected, setSelected] = useState<Set<string>>(new Set())
+    const [generateAsDraft, setGenerateAsDraft] = useState(true)
 
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(searchQuery)
             setPage(1)
-        }, 500)
+        }, 400)
         return () => clearTimeout(timer)
     }, [searchQuery])
 
     const { data: project, isLoading: projectLoading } = useQuery({
         queryKey: ['project', projectId],
-        queryFn: async () => {
-            const response = await projectsApi.getById(projectId)
-            return response.data
-        },
+        queryFn: async () => (await projectsApi.getById(projectId)).data,
     })
 
     const { data: stats } = useQuery({
         queryKey: ['project-stats', projectId],
-        queryFn: async () => {
-            const response = await projectsApi.getStats(projectId)
-            return response.data
-        },
+        queryFn: async () => (await projectsApi.getStats(projectId)).data,
     })
 
     const { data: contentsData, isLoading: contentsLoading } = useQuery({
-        queryKey: ['contents', projectId, page, statusFilter, debouncedSearch],
-        queryFn: async () => {
-            const response = await contentApi.getContents(
-                projectId,
-                page,
-                20,
-                statusFilter === 'all' ? undefined : statusFilter,
-                debouncedSearch || undefined
+        queryKey: ['contents', projectId, page, tab, debouncedSearch],
+        queryFn: async () =>
+            (
+                await contentApi.getContents(
+                    projectId,
+                    page,
+                    20,
+                    tab === 'all' ? undefined : tab,
+                    debouncedSearch || undefined,
+                )
+            ).data,
+    })
+
+    const generateMutation = useMutation({
+        mutationFn: async () => {
+            toast.loading('Generating articles...', { id: 'generate' })
+            return (await contentApi.generateSync(projectId, { asDraft: generateAsDraft })).data
+        },
+        onSuccess: (data) => {
+            toast.success(
+                `${formatNumber(data.generatedCount)} articles generated${generateAsDraft ? ' as drafts' : ' into the queue'}`,
+                { id: 'generate' },
             )
-            return response.data
+            queryClient.invalidateQueries({ queryKey: ['contents', projectId] })
+            queryClient.invalidateQueries({ queryKey: ['project-stats', projectId] })
+            queryClient.invalidateQueries({ queryKey: ['overall-stats'] })
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || 'Failed to generate content', { id: 'generate' })
         },
     })
 
-    // Toggle selection
-    const toggleSelection = (id: string) => {
-        setSelectedItems(prev => {
-            const newSet = new Set(prev)
-            if (newSet.has(id)) {
-                newSet.delete(id)
-            } else {
-                newSet.add(id)
-            }
-            return newSet
-        })
+    const changeTab = (next: Tab) => {
+        setTab(next)
+        setPage(1)
+        setSelected(new Set())
     }
 
-    // Bulk delete mutation
-    const bulkDeleteMutation = useMutation({
-        mutationFn: async (ids: string[]) => {
-            toast.loading('Deleting content...', { id: 'bulk-delete' })
-            await Promise.all(ids.map(id => contentApi.delete(id)))
-        },
-        onSuccess: () => {
-            toast.success('Content deleted successfully', { id: 'bulk-delete' })
-            queryClient.invalidateQueries({ queryKey: ['contents', projectId] })
-            queryClient.invalidateQueries({ queryKey: ['project-stats', projectId] })
-            setSelectedItems(new Set())
-        },
-        onError: () => {
-            toast.error('Failed to delete content', { id: 'bulk-delete' })
-        },
-    })
-
-    // Bulk publish mutation  
-    const bulkPublishMutation = useMutation({
-        mutationFn: async ({ ids, delay }: { ids: string[], delay: number }) => {
-            toast.loading(`Publishing ${ids.length} item(s)...`, { id: 'bulk-publish' })
-            for (let i = 0; i < ids.length; i++) {
-                await contentApi.update(ids[i], { publishStatus: 'published' })
-                if (i < ids.length - 1 && delay > 0) {
-                    await new Promise(resolve => setTimeout(resolve, delay * 1000))
-                }
-            }
-        },
-        onSuccess: () => {
-            toast.success('Content published successfully', { id: 'bulk-publish' })
-            queryClient.invalidateQueries({ queryKey: ['contents', projectId] })
-            queryClient.invalidateQueries({ queryKey: ['project-stats', projectId] })
-            setSelectedItems(new Set())
-        },
-        onError: () => {
-            toast.error('Failed to publish content', { id: 'bulk-publish' })
-        },
-    })
-
-    // Bulk unpublish mutation
-    const bulkUnpublishMutation = useMutation({
-        mutationFn: async (ids: string[]) => {
-            toast.loading(`Unpublishing ${ids.length} item(s)...`, { id: 'bulk-unpublish' })
-            await contentApi.unpublish(ids)
-        },
-        onSuccess: () => {
-            toast.success('Content unpublished successfully', { id: 'bulk-unpublish' })
-            queryClient.invalidateQueries({ queryKey: ['contents', projectId] })
-            queryClient.invalidateQueries({ queryKey: ['project-stats', projectId] })
-            setSelectedItems(new Set())
-        },
-        onError: () => {
-            toast.error('Failed to unpublish content', { id: 'bulk-unpublish' })
-        },
-    })
-
-    const handleBulkDelete = () => {
-        if (confirm(`Are you sure you want to delete ${selectedItems.size} item(s)?`)) {
-            bulkDeleteMutation.mutate(Array.from(selectedItems))
-        }
-    }
-
-    const handleBulkPublish = () => {
-        if (selectedItems.size === 0) return
-        bulkPublishMutation.mutate({
-            ids: Array.from(selectedItems),
-            delay: bulkPublishDelay
+    const toggleAll = (ids: string[], select: boolean) => {
+        setSelected((prev) => {
+            const next = new Set(prev)
+            ids.forEach((id) => (select ? next.add(id) : next.delete(id)))
+            return next
         })
     }
 
     if (projectLoading) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
+            <div className="flex min-h-[60vh] items-center justify-center">
                 <Spinner size="lg" />
             </div>
         )
     }
 
     if (!project) {
-        return <div>Project not found</div>
+        return (
+            <div className="mx-auto max-w-7xl px-4 py-16 text-center text-gray-500 sm:px-6 lg:px-8">Project not found</div>
+        )
     }
 
-    return (
-        <div className="container mx-auto px-4 py-8 max-w-7xl">
-            <div className="mb-6 flex justify-between items-center">
-                <Link to="/projects">
-                    <Button className="bg-gray-100 hover:bg-gray-200 text-gray-800">
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back to Projects
-                    </Button>
-                </Link>
-                <Link to={`/projects/${projectId}/api-docs`}>
-                    <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-                        <Book className="w-4 h-4 mr-2" />
-                        API Documentation
-                    </Button>
-                </Link>
-            </div>
+    const tabs: { key: Tab; label: string; count?: number }[] = [
+        { key: 'all', label: 'All', count: stats?.totalContents },
+        { key: 'draft', label: 'Drafts', count: stats?.draftContents },
+        { key: 'pending', label: 'Queued', count: stats?.pendingContents },
+        { key: 'published', label: 'Published', count: stats?.publishedContents },
+    ]
 
-            <div className="mb-8">
-                <div className="flex items-start gap-4 mb-4">
-                    {project.thumbnailUrl && (
+    const isProjectEmpty = (stats?.totalContents ?? 0) === 0
+
+    return (
+        <div className="mx-auto max-w-7xl px-4 py-8 pb-28 sm:px-6 lg:px-8">
+            <PageHeader
+                back={{ to: '/projects', label: 'Projects' }}
+                leading={
+                    project.thumbnailUrl ? (
                         <img
                             src={project.thumbnailUrl}
                             alt={project.name}
-                            className="w-24 h-24 rounded-lg object-cover border-2 border-blue-500 shadow-lg"
+                            className="h-16 w-16 shrink-0 rounded-xl border border-gray-200 object-cover"
                         />
-                    )}
-                    <div className="flex-1">
-                        <h1 className="text-4xl font-bold mb-2">{project.name}</h1>
-                        {project.description && (
-                            <p className="text-gray-600 dark:text-gray-400">{project.description}</p>
+                    ) : undefined
+                }
+                title={project.name}
+                description={
+                    <div className="space-y-2.5">
+                        {project.description && <p>{project.description}</p>}
+                        {project.categories && project.categories.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                                {project.categories.map((category) => (
+                                    <span
+                                        key={category.id}
+                                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                        style={{
+                                            backgroundColor: `${category.color || '#3B82F6'}1A`,
+                                            color: category.color || '#3B82F6',
+                                        }}
+                                    >
+                                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: category.color || '#3B82F6' }} />
+                                        {category.name}
+                                    </span>
+                                ))}
+                            </div>
                         )}
                     </div>
-                </div>
+                }
+                actions={
+                    <>
+                        <ExportMenu projectId={projectId} projectName={project.name} totalContents={stats?.totalContents || 0} />
+                        <Link to="/projects/$projectId/api-docs" params={{ projectId }} className="btn btn-secondary btn-sm">
+                            <Book /> API Docs
+                        </Link>
+                    </>
+                }
+            />
 
-                {/* Categories */}
-                {project.categories && project.categories.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                        {project.categories.map((category) => (
-                            <span
-                                key={category.id}
-                                className="px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1.5"
-                                style={{
-                                    backgroundColor: category.color ? `${category.color}20` : '#3B82F620',
-                                    color: category.color || '#3B82F6',
-                                }}
-                            >
-                                <span
-                                    className="w-2 h-2 rounded-full"
-                                    style={{ backgroundColor: category.color || '#3B82F6' }}
-                                />
-                                {category.name}
-                            </span>
-                        ))}
-                    </div>
-                )}
+            {/* Stats (click to filter) */}
+            <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+                <StatTile label="Total articles" value={formatNumber(stats?.totalContents)} icon={<FileText />} tone="blue" onClick={() => changeTab('all')} active={tab === 'all'} />
+                <StatTile label="Drafts" value={formatNumber(stats?.draftContents)} icon={<FileEdit />} tone="slate" onClick={() => changeTab('draft')} active={tab === 'draft'} />
+                <StatTile label="Queued" value={formatNumber(stats?.pendingContents)} icon={<Clock />} tone="amber" onClick={() => changeTab('pending')} active={tab === 'pending'} />
+                <StatTile label="Published" value={formatNumber(stats?.publishedContents)} icon={<CheckCircle2 />} tone="green" onClick={() => changeTab('published')} active={tab === 'published'} />
             </div>
 
-            {/* Stats */}
-            {stats && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                    <Card className="text-center p-6">
-                        <p className="text-3xl font-bold text-blue-600">{stats.totalContents}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Total Contents</p>
-                    </Card>
-                    <Card className="text-center p-6">
-                        <p className="text-3xl font-bold text-green-600">{stats.publishedContents}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Published</p>
-                    </Card>
-                    <Card className="text-center p-6">
-                        <p className="text-3xl font-bold text-orange-600">{stats.pendingContents}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Pending</p>
-                    </Card>
-                </div>
-            )}
-
-            {/* Export and Publish Controls */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                {/* Export Menu */}
-                <Card className="p-6">
-                    <h3 className="text-xl font-bold mb-4">Export Content</h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                        Download all generated content in various formats
-                    </p>
-                    <ExportMenu
-                        projectId={projectId}
-                        projectName={project.name}
-                        totalContents={stats?.totalContents || 0}
-                    />
-                </Card>
-
-                {/* Publish Control */}
+            {/* Publishing: automatic (queue) vs manual (drafts), kept separate */}
+            <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
                 <PublishJobControl
                     projectId={projectId}
                     totalContents={stats?.totalContents || 0}
                     pendingContents={stats?.pendingContents || 0}
                 />
+                <ManualPublishPanel projectId={projectId} stats={stats} onReviewDrafts={() => changeTab('draft')} />
             </div>
 
-            {/* Content List */}
-            <Card className="p-6">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold">Generated Content</h2>
-                        {selectedItems.size > 0 && (
-                            <p className="text-sm text-blue-600 mt-1">
-                                {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected
-                            </p>
-                        )}
+            {/* Content list */}
+            <div className="surface overflow-hidden">
+                <div className="flex flex-col gap-4 border-b border-gray-100 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
+                        {tabs.map((t) => (
+                            <button
+                                key={t.key}
+                                onClick={() => changeTab(t.key)}
+                                className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${tab === t.key ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
+                            >
+                                {t.label}
+                                <span className={`rounded-md px-1.5 text-xs tabular-nums ${tab === t.key ? 'bg-white/15' : 'bg-gray-100 text-gray-500'}`}>
+                                    {formatNumber(t.count)}
+                                </span>
+                            </button>
+                        ))}
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-                        <div className="relative flex-1 sm:w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Cari berdasarkan judul..."
-                                className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
-                        <select
-                            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            value={statusFilter}
-                            onChange={(e) => {
-                                setStatusFilter(e.target.value)
-                                setPage(1)
-                            }}
-                        >
-                            <option value="all">All</option>
-                            <option value="pending">Pending</option>
-                            <option value="published">Published</option>
-                        </select>
+                    <div className="relative w-full lg:w-72">
+                        <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search by title..."
+                            className="field pl-9"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
                     </div>
                 </div>
 
-                {/* Bulk Actions */}
-                {selectedItems.size > 0 && (
-                    <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex flex-wrap gap-3 items-center">
-                        <Button
-                            size="sm"
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                            onClick={handleBulkDelete}
-                        >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete Selected
-                        </Button>
-
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="number"
-                                min="0"
-                                max="60"
-                                className="w-20 px-2 py-1 border rounded text-sm"
-                                value={bulkPublishDelay}
-                                onChange={(e) => setBulkPublishDelay(Math.max(0, parseInt(e.target.value) || 0))}
-                            />
-                            <span className="text-sm text-gray-600">sec delay</span>
-                            <Button
-                                size="sm"
-                                className="bg-green-600 hover:bg-green-700 text-white"
-                                onClick={handleBulkPublish}
-                            >
-                                <Sparkles className="w-4 h-4 mr-2" />
-                                Publish Selected
-                            </Button>
-
-                            <Button
-                                size="sm"
-                                className="bg-orange-600 hover:bg-orange-700 text-white"
-                                onClick={() => bulkUnpublishMutation.mutate(Array.from(selectedItems))}
-                            >
-                                <RotateCcw className="w-4 h-4 mr-2" />
-                                Unpublish Selected
-                            </Button>
-                        </div>
-
-                        <Button
-                            size="sm"
-                            className="bg-gray-200 hover:bg-gray-300 text-gray-800 ml-auto"
-                            onClick={() => setSelectedItems(new Set())}
-                        >
-                            Clear Selection
-                        </Button>
+                {tab === 'draft' && (stats?.draftContents ?? 0) > 0 && (
+                    <div className="border-b border-gray-100 bg-slate-50 px-5 py-2.5 text-sm text-slate-600">
+                        Drafts are not published by auto-publish. Select the ones you want and use <strong>Publish now</strong>.
                     </div>
                 )}
 
                 {contentsLoading ? (
-                    <div className="flex justify-center py-8">
+                    <div className="flex justify-center py-16">
                         <Spinner />
                     </div>
                 ) : !contentsData || contentsData.contents.length === 0 ? (
-                    <div className="text-center py-8">
-                        <p className="text-gray-600 dark:text-gray-400">No content generated yet</p>
-                        <Button className="mt-4 bg-blue-600 text-white hover:bg-blue-700">
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            Generate Content
-                        </Button>
-                    </div>
+                    isProjectEmpty && !debouncedSearch ? (
+                        <div className="mx-auto max-w-md px-4 py-14 text-center">
+                            <span className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                                <Sparkles className="h-6 w-6" />
+                            </span>
+                            <h3 className="text-base font-semibold text-gray-900">No articles generated yet</h3>
+                            <p className="mt-1 text-sm text-gray-500">
+                                Generate articles from this project&apos;s uploaded data and template.
+                            </p>
+                            <label className="mt-5 inline-flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    className="checkbox"
+                                    checked={generateAsDraft}
+                                    onChange={(e) => setGenerateAsDraft(e.target.checked)}
+                                />
+                                Save as drafts (publish manually later)
+                            </label>
+                            <div className="mt-4">
+                                <button className="btn btn-primary" onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending}>
+                                    <Sparkles /> {generateMutation.isPending ? 'Generating...' : 'Generate articles'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="px-4 py-14 text-center text-sm text-gray-500">
+                            {debouncedSearch ? `No articles match "${debouncedSearch}".` : 'No articles in this view.'}
+                        </div>
+                    )
                 ) : (
                     <>
-                        <div className="space-y-4">
-                            {contentsData.contents.map((content: GeneratedContent) => (
-                                <Card key={content.id} className="p-4 hover:shadow-lg transition-shadow">
-                                    <div className="flex gap-3 items-start">
-                                        {/* Checkbox */}
-                                        <button
-                                            onClick={() => toggleSelection(content.id)}
-                                            className="mt-1 flex-shrink-0"
-                                        >
-                                            {selectedItems.has(content.id) ? (
-                                                <CheckSquare className="w-5 h-5 text-blue-600" />
-                                            ) : (
-                                                <Square className="w-5 h-5 text-gray-400 hover:text-blue-500" />
-                                            )}
-                                        </button>
-
-                                        <div className="flex-1">
-                                            <h3 className="text-lg font-semibold mb-1">{content.title}</h3>
-                                            {content.metaDescription && (
-                                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
-                                                    {content.metaDescription}
-                                                </p>
-                                            )}
-                                            <div className="flex gap-2 items-center">
-                                                <span className={`px-2 py-1 rounded text-xs font-medium ${content.publishStatus === 'published'
-                                                    ? 'bg-green-100 text-green-700'
-                                                    : 'bg-yellow-100 text-yellow-700'
-                                                    }`}>
-                                                    {content.publishStatus}
-                                                </span>
-                                                <span className="text-xs text-gray-500">{content.slug}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <Link to="/contents/$contentId" params={{ contentId: content.id }}>
-                                                <Button className="bg-gray-100 hover:bg-gray-200 text-gray-800 p-2">
-                                                    <Eye className="w-4 h-4" />
-                                                </Button>
-                                            </Link>
-                                            <Button className="bg-red-100 hover:bg-red-200 text-red-700 p-2">
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </Card>
-                            ))}
-                        </div>
-
-                        {contentsData.totalPages > 1 && (
-                            <div className="flex justify-center mt-6 gap-2">
-                                <Button
-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                                    isDisabled={page === 1}
-                                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50"
-                                >
-                                    Previous
-                                </Button>
-                                <span className="px-4 py-2">
-                                    Page {page} of {contentsData.totalPages}
-                                </span>
-                                <Button
-                                    onClick={() => setPage(p => Math.min(contentsData.totalPages, p + 1))}
-                                    isDisabled={page === contentsData.totalPages}
-                                    className="bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50"
-                                >
-                                    Next
-                                </Button>
-                            </div>
-                        )}
+                        <ContentTable
+                            contents={contentsData.contents}
+                            selected={selected}
+                            onToggle={(id) => setSelected((prev) => toggleInSet(prev, id))}
+                            onToggleAll={toggleAll}
+                        />
+                        <Pagination page={page} totalPages={contentsData.totalPages} onChange={setPage} />
                     </>
                 )}
-            </Card>
+            </div>
+
+            <ContentBulkBar selected={selected} onClear={() => setSelected(new Set())} />
         </div>
     )
 }

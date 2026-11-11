@@ -2,6 +2,9 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, Jo
 import { Project } from './project.entity';
 
 export enum PublishStatus {
+    // DRAFT: parked content. Never picked up by auto-publish jobs and hidden from the public API.
+    // It only goes live through a manual publish (or after being moved back to PENDING).
+    DRAFT = 'draft',
     PENDING = 'pending',
     PUBLISHED = 'published',
     FAILED = 'failed',

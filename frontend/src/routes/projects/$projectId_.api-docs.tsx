@@ -128,7 +128,7 @@ export function ProjectApiDocsPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-semibold">Query Parameters:</p>
                   <ul className="text-sm space-y-1 ml-4">
-                    <li><code className="px-1 bg-gray-100 rounded text-xs">status</code> - Filter by status (published, pending, failed)</li>
+                    <li><code className="px-1 bg-gray-100 rounded text-xs">status</code> - Filter by status (published, pending, failed). Drafts are never returned</li>
                     <li><code className="px-1 bg-gray-100 rounded text-xs">page</code> - Page number (default: 1)</li>
                     <li><code className="px-1 bg-gray-100 rounded text-xs">limit</code> - Items per page (default: 50, max: 100)</li>
                   </ul>
@@ -205,7 +205,7 @@ export function ProjectApiDocsPage() {
                   <p className="text-sm font-semibold">Query Parameters:</p>
                   <ul className="text-sm space-y-1 ml-4">
                     <li><code className="px-1 bg-gray-100 rounded text-xs">projectId</code> - Optional, filter by specific project</li>
-                    <li><code className="px-1 bg-gray-100 rounded text-xs">status</code> - Filter by status (published, pending, failed)</li>
+                    <li><code className="px-1 bg-gray-100 rounded text-xs">status</code> - Filter by status (published, pending, failed). Drafts are never returned</li>
                     <li><code className="px-1 bg-gray-100 rounded text-xs">page</code> - Page number (default: 1)</li>
                     <li><code className="px-1 bg-gray-100 rounded text-xs">limit</code> - Items per page (default: 50, max: 100)</li>
                   </ul>
@@ -255,7 +255,7 @@ export function ProjectApiDocsPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-semibold">Query Parameters:</p>
                   <ul className="text-sm space-y-1 ml-4">
-                    <li><code className="px-1 bg-gray-100 rounded text-xs">status</code> - Filter by status (published, pending, failed)</li>
+                    <li><code className="px-1 bg-gray-100 rounded text-xs">status</code> - Filter by status (published, pending, failed). Drafts are never returned</li>
                     <li><code className="px-1 bg-gray-100 rounded text-xs">page</code> - Page number (default: 1)</li>
                     <li><code className="px-1 bg-gray-100 rounded text-xs">limit</code> - Items per page (default: 50, max: 100)</li>
                   </ul>
