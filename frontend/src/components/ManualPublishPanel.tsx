@@ -2,6 +2,7 @@ import { ArrowRight, Clock, FileEdit, Hand, Send } from 'lucide-react'
 import type { ProjectStats } from '../lib/api'
 import { useContentActions } from '../lib/content-actions'
 import { formatNumber } from './ui'
+import { useConfirm } from './Modal'
 
 interface ManualPublishPanelProps {
     projectId: string
@@ -16,6 +17,7 @@ interface ManualPublishPanelProps {
  */
 export function ManualPublishPanel({ projectId, stats, onReviewDrafts }: ManualPublishPanelProps) {
     const { setProjectStatus, isBusy } = useContentActions()
+    const confirm = useConfirm()
     const drafts = stats?.draftContents ?? 0
     const queued = stats?.pendingContents ?? 0
 
@@ -48,10 +50,14 @@ export function ManualPublishPanel({ projectId, stats, onReviewDrafts }: ManualP
                 <button
                     className="btn btn-success w-full"
                     disabled={isBusy || drafts === 0}
-                    onClick={() => {
-                        if (confirm(`Publish all ${drafts} draft(s) now? They go live immediately.`)) {
-                            setProjectStatus.mutate({ projectId, from: 'draft', to: 'published' })
-                        }
+                    onClick={async () => {
+                        const ok = await confirm({
+                            title: `Publish all ${formatNumber(drafts)} drafts now?`,
+                            message: 'They go live immediately, outside the auto-publish queue.',
+                            confirmText: 'Publish all',
+                            tone: 'primary',
+                        })
+                        if (ok) setProjectStatus.mutate({ projectId, from: 'draft', to: 'published' })
                     }}
                 >
                     <Send /> Publish all drafts now
@@ -60,10 +66,14 @@ export function ManualPublishPanel({ projectId, stats, onReviewDrafts }: ManualP
                     <button
                         className="btn btn-secondary"
                         disabled={isBusy || queued === 0}
-                        onClick={() => {
-                            if (confirm(`Move all ${queued} queued article(s) to draft? Auto-publish will skip them.`)) {
-                                setProjectStatus.mutate({ projectId, from: 'pending', to: 'draft' })
-                            }
+                        onClick={async () => {
+                            const ok = await confirm({
+                                title: `Move all ${formatNumber(queued)} queued articles to draft?`,
+                                message: 'Auto-publish will skip them until you queue or publish them again.',
+                                confirmText: 'Move to draft',
+                                tone: 'primary',
+                            })
+                            if (ok) setProjectStatus.mutate({ projectId, from: 'pending', to: 'draft' })
                         }}
                         title="Mass draft: pull every queued article out of auto-publish"
                     >

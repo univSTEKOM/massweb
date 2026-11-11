@@ -1,267 +1,232 @@
-import { createFileRoute, useNavigate, Link, redirect } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { organizationsApi } from '../../lib/api';
-import { Card, Button } from '@heroui/react';
-import { ArrowLeft, UserPlus, Trash2, Shield, User } from 'lucide-react';
+import { Crown, Loader2, Shield, Trash2, UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { organizationsApi } from '../../lib/api';
+import { PageHeader } from '../../components/ui';
+import { Modal, useConfirm } from '../../components/Modal';
 
 export const Route = createFileRoute('/organizations/$organizationId/members')({
   component: OrganizationMembersPage,
   beforeLoad: async () => {
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
+    if (!localStorage.getItem('auth_token')) {
       throw redirect({ to: '/login' });
     }
   },
 });
 
+// Must match the backend enum values (lowercase)
+type Role = 'org_admin' | 'org_member';
+
 interface Member {
   id: string;
   userId: string;
-  organizationId: string;
-  role: 'ORG_ADMIN' | 'ORG_MEMBER';
-  user: {
-    id: string;
-    name: string;
-    email: string;
-  };
-  joinedAt: string;
+  role: Role;
+  user: { id: string; name: string; email: string };
 }
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
 function OrganizationMembersPage() {
   const { organizationId } = Route.useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
 
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState<'ORG_ADMIN' | 'ORG_MEMBER'>('ORG_MEMBER');
+  const [showAdd, setShowAdd] = useState(false);
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<Role>('org_member');
 
-  // Fetch organization details including members
   const { data: organization, isLoading } = useQuery({
     queryKey: ['organization', organizationId],
-    queryFn: async () => {
-      const response = await organizationsApi.getById(organizationId);
-      return response.data;
+    queryFn: async () => (await organizationsApi.getById(organizationId)).data,
+  });
+  const members: Member[] = (organization?.members as Member[]) || [];
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });
+  const errorMessage = (error: any, fallback: string) => error.response?.data?.message || fallback;
+
+  const addMember = useMutation({
+    mutationFn: async () => (await organizationsApi.addMember(organizationId, { email: email.trim(), role })).data,
+    onSuccess: () => {
+      refresh();
+      toast.success('Member added');
+      setShowAdd(false);
+      setEmail('');
+      setRole('org_member');
     },
+    onError: (error: any) => toast.error(errorMessage(error, 'Failed to add member')),
   });
 
-  // Extract members from organization
-  const members = organization?.members || [];
-
-  // Add member mutation
-  const addMemberMutation = useMutation({
-    mutationFn: async () => {
-      const response = await organizationsApi.addMember(organizationId, {
-        email: newMemberEmail,
-        role: newMemberRole,
-      });
-      return response.data;
-    },
+  const updateRole = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: Role }) =>
+      (await organizationsApi.updateMemberRole(organizationId, userId, role)).data,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });
-      toast.success('Member added successfully');
-      setShowAddForm(false);
-      setNewMemberEmail('');
-      setNewMemberRole('ORG_MEMBER');
+      refresh();
+      toast.success('Role updated');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to add member');
-    },
+    onError: (error: any) => toast.error(errorMessage(error, 'Failed to update role')),
   });
 
-  // Update member role mutation
-  const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const response = await organizationsApi.updateMemberRole(organizationId, userId, role);
-      return response.data;
-    },
+  const removeMember = useMutation({
+    mutationFn: async (userId: string) => (await organizationsApi.removeMember(organizationId, userId)).data,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });
-      toast.success('Member role updated');
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update member role');
-    },
-  });
-
-  // Remove member mutation
-  const removeMemberMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const response = await organizationsApi.removeMember(organizationId, userId);
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });
+      refresh();
       toast.success('Member removed');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to remove member');
-    },
+    onError: (error: any) => toast.error(errorMessage(error, 'Failed to remove member')),
   });
 
-  const handleAddMember = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMemberEmail.trim()) {
-      toast.error('Please enter an email address');
-      return;
-    }
-    addMemberMutation.mutate();
-  };
-
-  const handleRemoveMember = (userId: string, userName: string) => {
-    if (window.confirm(`Are you sure you want to remove ${userName} from this organization?`)) {
-      removeMemberMutation.mutate(userId);
-    }
+  const handleRemove = async (member: Member) => {
+    const ok = await confirm({
+      title: `Remove ${member.user.name}?`,
+      message: `${member.user.email} will lose access to ${organization?.name ?? 'this organization'}.`,
+      confirmText: 'Remove member',
+    });
+    if (ok) removeMember.mutate(member.userId);
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <Link to={`/organizations/${organizationId}/settings`} className="flex items-center text-blue-600 hover:text-blue-700 mb-4">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Settings
-        </Link>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Members</h1>
-            <p className="text-gray-600 mt-1">{organization?.name}</p>
-          </div>
-          <Button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Add Member</span>
-          </Button>
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      <PageHeader
+        back={{ to: '/organizations/$organizationId/settings', params: { organizationId }, label: 'Organization settings' }}
+        title="Members"
+        description={organization ? `People who can access ${organization.name}` : undefined}
+        actions={
+          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>
+            <UserPlus /> Add member
+          </button>
+        }
+      />
+
+      <div className="surface overflow-hidden">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <h2 className="section-title">Current members</h2>
+          <span className="text-sm text-gray-500 tabular-nums">{members.length}</span>
         </div>
+
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+          </div>
+        ) : members.length === 0 ? (
+          <p className="px-5 py-12 text-center text-sm text-gray-500">No members yet. Add members to get started.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {members.map((member) => {
+              const isOwner = member.userId === organization?.ownerId;
+              return (
+                <li key={member.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
+                      {initials(member.user.name || member.user.email)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-gray-900">{member.user.name}</p>
+                      <p className="truncate text-sm text-gray-500">{member.user.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pl-12 sm:pl-0">
+                    {isOwner ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200 ring-inset">
+                        <Crown className="h-3 w-3" /> Owner
+                      </span>
+                    ) : (
+                      <>
+                        <div className="relative">
+                          <Shield className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                          <select
+                            className="field h-9 w-36 pl-8 text-sm"
+                            value={member.role}
+                            disabled={updateRole.isPending}
+                            onChange={(e) => updateRole.mutate({ userId: member.userId, role: e.target.value as Role })}
+                            aria-label={`Role of ${member.user.name}`}
+                          >
+                            <option value="org_member">Member</option>
+                            <option value="org_admin">Admin</option>
+                          </select>
+                        </div>
+                        <button
+                          className="btn btn-danger-ghost btn-sm btn-icon"
+                          onClick={() => handleRemove(member)}
+                          disabled={removeMember.isPending}
+                          title="Remove member"
+                          aria-label={`Remove ${member.user.name}`}
+                        >
+                          <Trash2 />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
-      {/* Add Member Form */}
-      {showAddForm && (
-        <Card className="p-6 mb-6">
-          <h3 className="text-lg font-bold mb-4">Add New Member</h3>
-          <form onSubmit={handleAddMember} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={newMemberEmail}
-                onChange={(e) => setNewMemberEmail(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="user@example.com"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Role
-              </label>
-              <select
-                value={newMemberRole}
-                onChange={(e) => setNewMemberRole(e.target.value as 'ORG_ADMIN' | 'ORG_MEMBER')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="ORG_MEMBER">Member</option>
-                <option value="ORG_ADMIN">Admin</option>
-              </select>
-            </div>
-            <div className="flex space-x-2">
-              <Button
-                type="submit"
-                disabled={addMemberMutation.isPending}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                {addMemberMutation.isPending ? 'Adding...' : 'Add Member'}
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  setShowAddForm(false);
-                  setNewMemberEmail('');
-                  setNewMemberRole('ORG_MEMBER');
-                }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Card>
-      )}
+      <p className="mt-3 text-xs text-gray-500">
+        <strong className="font-medium text-gray-700">Admins</strong> can manage members, categories and API keys.{' '}
+        <strong className="font-medium text-gray-700">Members</strong> can work on projects and content.
+      </p>
 
-      {/* Members List */}
-      <Card className="p-6">
-        <h3 className="text-lg font-bold mb-4">Current Members</h3>
-
-        {members && members.length > 0 ? (
-          <div className="space-y-3">
-            {members.map((member) => (
-              <div key={member.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <User className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{member.user.name}</p>
-                    <p className="text-sm text-gray-500">{member.user.email}</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  {/* Role Badge */}
-                  <div className={`px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${member.role === 'ORG_ADMIN'
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'bg-gray-200 text-gray-700'
-                    }`}>
-                    {member.role === 'ORG_ADMIN' && <Shield className="w-3 h-3" />}
-                    <span>{member.role === 'ORG_ADMIN' ? 'Admin' : 'Member'}</span>
-                  </div>
-
-                  {/* Role Toggle */}
-                  {member.userId !== organization?.ownerId && (
-                    <>
-                      <select
-                        value={member.role}
-                        onChange={(e) => updateRoleMutation.mutate({
-                          userId: member.userId,
-                          role: e.target.value
-                        })}
-                        className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                      >
-                        <option value="ORG_MEMBER">Member</option>
-                        <option value="ORG_ADMIN">Admin</option>
-                      </select>
-
-                      {/* Remove Button */}
-                      <button
-                        onClick={() => handleRemoveMember(member.userId, member.user.name)}
-                        disabled={removeMemberMutation.isPending}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-
-                  {member.userId === organization?.ownerId && (
-                    <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                      Owner
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+      <Modal
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        title="Add member"
+        description="The person must already have a Massweb account."
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setShowAdd(false)}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              disabled={!email.trim() || addMember.isPending}
+              onClick={() => addMember.mutate()}
+            >
+              {addMember.isPending ? <Loader2 className="animate-spin" /> : <UserPlus />}
+              Add member
+            </button>
+          </>
+        }
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (email.trim()) addMember.mutate();
+          }}
+        >
+          <div>
+            <label className="label" htmlFor="member-email">Email address</label>
+            <input
+              id="member-email"
+              type="email"
+              className="field"
+              placeholder="user@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoFocus
+              required
+            />
           </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            <p>No members found. Add members to get started.</p>
+          <div>
+            <label className="label" htmlFor="member-role">Role</label>
+            <select id="member-role" className="field" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+              <option value="org_member">Member</option>
+              <option value="org_admin">Admin</option>
+            </select>
           </div>
-        )}
-      </Card>
+        </form>
+      </Modal>
     </div>
   );
 }

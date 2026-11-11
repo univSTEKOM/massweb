@@ -1,57 +1,60 @@
-import { Button, Input, Card } from '@heroui/react'
-import { useState } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
+import { Modal } from '../Modal'
 
 interface EditOrganizationModalProps {
     isOpen: boolean
     onClose: () => void
-    organization: any
+    organization: { id: string; name?: string } | null
     onSave: (data: { name: string }) => Promise<void>
 }
 
 export function EditOrganizationModal({ isOpen, onClose, organization, onSave }: EditOrganizationModalProps) {
-    const [name, setName] = useState(organization?.name || '')
+    const [name, setName] = useState('')
     const [isLoading, setIsLoading] = useState(false)
 
-    const handleSave = async () => {
+    // Load the selected organization's name every time the modal opens
+    useEffect(() => {
+        if (isOpen) setName(organization?.name || '')
+    }, [isOpen, organization])
+
+    const handleSubmit = async () => {
+        if (!name.trim()) return
         setIsLoading(true)
         try {
-            await onSave({ name })
+            await onSave({ name: name.trim() })
             onClose()
+        } catch {
+            // the caller shows the error; keep the form open
         } finally {
             setIsLoading(false)
         }
     }
 
-    if (!isOpen) return null
-
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <Card className="w-full max-w-md p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold">Edit Organization</h3>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-                        <X className="w-5 h-5" />
+        <Modal
+            open={isOpen}
+            onClose={onClose}
+            title="Edit organization"
+            footer={
+                <>
+                    <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                    <button className="btn btn-primary" onClick={handleSubmit} disabled={!name.trim() || isLoading}>
+                        {isLoading && <Loader2 className="animate-spin" />}
+                        Save changes
                     </button>
-                </div>
-                <div className="space-y-4">
-                    <Input
-                        label="Organization Name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Enter organization name"
-                        fullWidth
-                    />
-                </div>
-                <div className="flex gap-2 mt-6 justify-end">
-                    <Button onClick={onClose} variant="ghost">
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSave} className="bg-blue-600 text-white" isLoading={isLoading}>
-                        Save Changes
-                    </Button>
-                </div>
-            </Card>
-        </div>
+                </>
+            }
+        >
+            <form
+                onSubmit={(e) => {
+                    e.preventDefault()
+                    handleSubmit()
+                }}
+            >
+                <label className="label" htmlFor="eo-name">Organization name</label>
+                <input id="eo-name" className="field" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            </form>
+        </Modal>
     )
 }

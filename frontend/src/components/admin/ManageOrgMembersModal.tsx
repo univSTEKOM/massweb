@@ -1,8 +1,8 @@
-import { Button, Input, Card } from '@heroui/react'
-import { useState } from 'react'
-import { X, Search, User } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, Loader2, Search, UserPlus } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { adminUsersApi } from '../../lib/admin-api'
+import { Modal } from '../Modal'
 
 interface ManageOrgMembersModalProps {
     isOpen: boolean
@@ -12,143 +12,134 @@ interface ManageOrgMembersModalProps {
     onAdd: (email: string, role: string) => Promise<void>
 }
 
-export function ManageOrgMembersModal({ isOpen, onClose, organizationId, organizationName, onAdd }: ManageOrgMembersModalProps) {
+type Role = 'org_admin' | 'org_member'
+interface UserHit {
+    id: string
+    name: string
+    email: string
+}
+
+export function ManageOrgMembersModal({ isOpen, onClose, organizationName, onAdd }: ManageOrgMembersModalProps) {
     const [search, setSearch] = useState('')
-    const [selectedUser, setSelectedUser] = useState<any>(null)
-    const [role, setRole] = useState<'org_admin' | 'org_member'>('org_member')
+    const [debounced, setDebounced] = useState('')
+    const [selectedUser, setSelectedUser] = useState<UserHit | null>(null)
+    const [role, setRole] = useState<Role>('org_member')
     const [isLoading, setIsLoading] = useState(false)
-    const [showDropdown, setShowDropdown] = useState(false)
 
-    // Search users
-    const { data: usersData } = useQuery({
-        queryKey: ['search-users', search],
-        queryFn: async () => {
-            if (!search || search.length < 2) return { data: [] }
-            const response = await adminUsersApi.getAll({ search, limit: 10 })
-            return response.data
-        },
-        enabled: !!search && search.length >= 2,
+    useEffect(() => {
+        const t = setTimeout(() => setDebounced(search.trim()), 300)
+        return () => clearTimeout(t)
+    }, [search])
+
+    const { data: usersData, isFetching } = useQuery({
+        queryKey: ['search-users', debounced],
+        queryFn: async () => (await adminUsersApi.getAll({ search: debounced, limit: 10 })).data,
+        enabled: isOpen && debounced.length >= 2 && !selectedUser,
     })
+    const users: UserHit[] = usersData?.data || []
 
-    const users = usersData?.data || []
+    const reset = () => {
+        setSearch('')
+        setDebounced('')
+        setSelectedUser(null)
+        setRole('org_member')
+    }
+
+    const close = () => {
+        reset()
+        onClose()
+    }
 
     const handleAdd = async () => {
         if (!selectedUser) return
-
         setIsLoading(true)
         try {
             await onAdd(selectedUser.email, role)
-            setSelectedUser(null)
-            setSearch('')
-            setRole('org_member')
+            reset()
+        } catch {
+            // the caller shows the error
         } finally {
             setIsLoading(false)
         }
     }
 
-    const handleSelectUser = (user: any) => {
-        setSelectedUser(user)
-        setSearch(user.email)
-        setShowDropdown(false)
-    }
-
-    if (!isOpen) return null
-
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <Card className="w-full max-w-md p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold">Add Member to {organizationName}</h3>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-                        <X className="w-5 h-5" />
+        <Modal
+            open={isOpen}
+            onClose={close}
+            title="Add member"
+            description={`Add an existing user to ${organizationName}.`}
+            footer={
+                <>
+                    <button className="btn btn-secondary" onClick={close}>Close</button>
+                    <button className="btn btn-primary" onClick={handleAdd} disabled={!selectedUser || isLoading}>
+                        {isLoading ? <Loader2 className="animate-spin" /> : <UserPlus />}
+                        Add member
                     </button>
-                </div>
-                <div className="space-y-4">
-                    <div className="relative">
-                        <label className="block text-sm font-medium mb-2">Search User</label>
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => {
-                                    setSearch(e.target.value)
-                                    setShowDropdown(true)
-                                    setSelectedUser(null)
-                                }}
-                                onFocus={() => setShowDropdown(true)}
-                                placeholder="Search by email or name..."
-                                className="w-full pl-10 pr-4 py-2 border rounded-lg bg-white dark:bg-gray-800"
-                            />
+                </>
+            }
+        >
+            <div className="space-y-4">
+                <div>
+                    <label className="label" htmlFor="om-search">User</label>
+                    {selectedUser ? (
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                            <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-gray-900">{selectedUser.name}</p>
+                                <p className="truncate text-xs text-gray-500">{selectedUser.email}</p>
+                            </div>
+                            <button className="btn btn-ghost btn-sm" onClick={() => setSelectedUser(null)}>Change</button>
                         </div>
-
-                        {/* Dropdown Results */}
-                        {showDropdown && search.length >= 2 && users.length > 0 && (
-                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                {users.map((user: any) => (
-                                    <button
-                                        key={user.id}
-                                        onClick={() => handleSelectUser(user)}
-                                        className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors text-left"
-                                    >
-                                        <User className="w-4 h-4 text-gray-400" />
-                                        <div className="flex-1 min-w-0">
-                                            <div className="font-medium text-sm truncate">{user.name}</div>
-                                            <div className="text-xs text-gray-500 truncate">{user.email}</div>
+                    ) : (
+                        <>
+                            <div className="relative">
+                                <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    id="om-search"
+                                    className="field pl-9"
+                                    placeholder="Search by name or email (min. 2 characters)"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                            {debounced.length >= 2 && (
+                                <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-gray-200">
+                                    {isFetching ? (
+                                        <div className="flex justify-center py-4">
+                                            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
                                         </div>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-
-                        {showDropdown && search.length >= 2 && users.length === 0 && (
-                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500">
-                                No users found
-                            </div>
-                        )}
-                    </div>
-
-                    {selectedUser && (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <div className="flex items-center gap-2">
-                                <User className="w-4 h-4 text-blue-600" />
-                                <div>
-                                    <div className="font-medium text-sm">{selectedUser.name}</div>
-                                    <div className="text-xs text-gray-600">{selectedUser.email}</div>
+                                    ) : users.length === 0 ? (
+                                        <p className="px-3 py-4 text-center text-sm text-gray-500">No users found</p>
+                                    ) : (
+                                        users.map((user) => (
+                                            <button
+                                                key={user.id}
+                                                type="button"
+                                                onClick={() => setSelectedUser(user)}
+                                                className="flex w-full items-center justify-between gap-3 border-b border-gray-100 px-3 py-2 text-left last:border-0 hover:bg-gray-50"
+                                            >
+                                                <span className="min-w-0">
+                                                    <span className="block truncate text-sm font-medium text-gray-900">{user.name}</span>
+                                                    <span className="block truncate text-xs text-gray-500">{user.email}</span>
+                                                </span>
+                                                <Check className="h-4 w-4 shrink-0 text-transparent" />
+                                            </button>
+                                        ))
+                                    )}
                                 </div>
-                            </div>
-                        </div>
+                            )}
+                        </>
                     )}
-
-                    <div>
-                        <label className="block text-sm font-medium mb-2">Role</label>
-                        <select
-                            value={role}
-                            onChange={(e) => setRole(e.target.value as any)}
-                            className="w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-800"
-                        >
-                            <option value="org_member">Member</option>
-                            <option value="org_admin">Admin</option>
-                        </select>
-                    </div>
                 </div>
-                <div className="flex gap-2 mt-6 justify-end">
-                    <Button onClick={onClose} variant="ghost">
-                        Cancel
-                    </Button>
-                    <Button onClick={handleAdd} className="bg-blue-600 text-white" isLoading={isLoading} isDisabled={!selectedUser}>
-                        Add Member
-                    </Button>
+                <div>
+                    <label className="label" htmlFor="om-role">Role</label>
+                    <select id="om-role" className="field" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+                        <option value="org_member">Member</option>
+                        <option value="org_admin">Admin</option>
+                    </select>
                 </div>
-            </Card>
-
-            {/* Click outside to close dropdown */}
-            {showDropdown && (
-                <div
-                    className="fixed inset-0 z-5"
-                    onClick={() => setShowDropdown(false)}
-                />
-            )}
-        </div>
+            </div>
+        </Modal>
     )
 }

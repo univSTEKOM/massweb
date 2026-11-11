@@ -50,6 +50,8 @@ export interface Organization {
     name: string;
     slug: string;
     ownerId: string;
+    /** false when deactivated by a super admin */
+    isActive?: boolean;
     members?: any[];
     createdAt: string;
     updatedAt: string;

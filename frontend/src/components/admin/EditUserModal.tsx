@@ -1,77 +1,69 @@
-import { Button, Input, Card } from '@heroui/react'
-import { useState, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
+import { Modal } from '../Modal'
 
 interface EditUserModalProps {
     isOpen: boolean
     onClose: () => void
-    user: any
+    user: { id: string; name?: string; email?: string } | null
     onSave: (data: { name?: string; email?: string }) => Promise<void>
 }
 
 export function EditUserModal({ isOpen, onClose, user, onSave }: EditUserModalProps) {
-    const [formData, setFormData] = useState({
-        name: user?.name || '',
-        email: user?.email || '',
-    })
+    const [formData, setFormData] = useState({ name: '', email: '' })
     const [isLoading, setIsLoading] = useState(false)
 
+    // Load the selected user's values every time the modal opens
     useEffect(() => {
-        if (user) {
-            setFormData({
-                name: user.name || '',
-                email: user.email || '',
-            })
-        }
-    }, [user])
+        if (isOpen && user) setFormData({ name: user.name || '', email: user.email || '' })
+    }, [isOpen, user])
 
-    const handleSave = async () => {
+    const valid = formData.name.trim() && formData.email.trim()
+
+    const handleSubmit = async () => {
+        if (!valid) return
         setIsLoading(true)
         try {
-            await onSave(formData)
+            await onSave({ name: formData.name.trim(), email: formData.email.trim() })
             onClose()
+        } catch {
+            // the caller shows the error; keep the form open
         } finally {
             setIsLoading(false)
         }
     }
 
-    if (!isOpen) return null
-
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <Card className="w-full max-w-md p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold">Edit User</h3>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-                        <X className="w-5 h-5" />
+        <Modal
+            open={isOpen}
+            onClose={onClose}
+            title="Edit user"
+            footer={
+                <>
+                    <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                    <button className="btn btn-primary" onClick={handleSubmit} disabled={!valid || isLoading}>
+                        {isLoading && <Loader2 className="animate-spin" />}
+                        Save changes
                     </button>
+                </>
+            }
+        >
+            <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                    e.preventDefault()
+                    handleSubmit()
+                }}
+            >
+                <div>
+                    <label className="label" htmlFor="eu-name">Full name</label>
+                    <input id="eu-name" className="field" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} autoFocus />
                 </div>
-                <div className="space-y-4">
-                    <Input
-                        label="Full Name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="Enter full name"
-                        fullWidth
-                    />
-                    <Input
-                        label="Email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        placeholder="Enter email address"
-                        fullWidth
-                    />
+                <div>
+                    <label className="label" htmlFor="eu-email">Email</label>
+                    <input id="eu-email" type="email" className="field" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
                 </div>
-                <div className="flex gap-2 mt-6 justify-end">
-                    <Button onClick={onClose} variant="ghost">
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSave} className="bg-blue-600 text-white" isLoading={isLoading}>
-                        Save Changes
-                    </Button>
-                </div>
-            </Card>
-        </div>
+            </form>
+        </Modal>
     )
 }

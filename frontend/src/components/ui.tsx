@@ -164,3 +164,19 @@ export function ProjectTypeBadge({ type }: { type?: ProjectType }) {
         </span>
     )
 }
+
+/* ------------------------------------------------------------------ */
+/* Dates                                                               */
+/* ------------------------------------------------------------------ */
+/** One date format across the app, e.g. "Nov 10, 2026" (or "Nov 10, 2026, 09:30"). */
+export function formatDate(value?: string | Date | null, withTime = false): string {
+    if (!value) return '—'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return '—'
+    return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
+    })
+}

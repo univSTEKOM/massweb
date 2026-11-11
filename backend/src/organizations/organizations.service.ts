@@ -129,7 +129,7 @@ export class OrganizationsService {
         const membership = this.orgMemberRepository.create({
             organizationId,
             userId: user.id,
-            role: addMemberDto.role || OrganizationRole.ORG_MEMBER,
+            role: this.normalizeRole(addMemberDto.role),
         });
 
         return await this.orgMemberRepository.save(membership);
@@ -175,8 +175,23 @@ export class OrganizationsService {
             throw new NotFoundException('Member not found');
         }
 
-        membership.role = role;
+        membership.role = this.normalizeRole(role);
         return await this.orgMemberRepository.save(membership);
+    }
+
+    /**
+     * Accept roles case-insensitively ('ORG_ADMIN' or 'org_admin') and reject unknown values,
+     * instead of letting an invalid value hit the MySQL enum column.
+     */
+    private normalizeRole(role?: string | null): OrganizationRole {
+        if (!role) {
+            return OrganizationRole.ORG_MEMBER;
+        }
+        const value = String(role).toLowerCase() as OrganizationRole;
+        if (!Object.values(OrganizationRole).includes(value)) {
+            throw new BadRequestException(`Invalid role. Use one of: ${Object.values(OrganizationRole).join(', ')}`);
+        }
+        return value;
     }
 
     async getMembers(organizationId: string): Promise<OrganizationMember[]> {

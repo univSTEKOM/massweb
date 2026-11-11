@@ -11,6 +11,7 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import { useEffect, useState } from 'react'
+import { Modal } from './Modal'
 import { Button } from '@heroui/react'
 import {
     Bold, Italic, Underline as UnderlineIcon, Code, List, ListOrdered,
@@ -29,6 +30,8 @@ const lowlight = createLowlight(common)
 export function RichTextEditor({ value, onChange, label }: RichTextEditorProps) {
     const [isHtmlMode, setIsHtmlMode] = useState(false)
     const [htmlContent, setHtmlContent] = useState(value)
+    // Link / image URL dialog (replaces window.prompt)
+    const [urlDialog, setUrlDialog] = useState<{ kind: 'link' | 'image'; url: string } | null>(null)
 
     const editor = useEditor({
         extensions: [
@@ -67,13 +70,23 @@ export function RichTextEditor({ value, onChange, label }: RichTextEditorProps) 
     }, [value, editor])
 
     const addLink = () => {
-        const url = prompt('Enter URL:')
-        if (url && editor) editor.chain().focus().setLink({ href: url }).run()
+        setUrlDialog({ kind: 'link', url: (editor?.getAttributes('link').href as string) || '' })
+    }
+
+    const applyUrl = () => {
+        if (!urlDialog || !editor) return
+        const url = urlDialog.url.trim()
+        if (urlDialog.kind === 'link') {
+            if (url) editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+            else editor.chain().focus().extendMarkRange('link').unsetLink().run()
+        } else if (url) {
+            editor.chain().focus().setImage({ src: url }).run()
+        }
+        setUrlDialog(null)
     }
 
     const addImage = () => {
-        const url = prompt('Enter image URL:')
-        if (url && editor) editor.chain().focus().setImage({ src: url }).run()
+        setUrlDialog({ kind: 'image', url: '' })
     }
 
     const addTable = () => {
@@ -154,6 +167,35 @@ export function RichTextEditor({ value, onChange, label }: RichTextEditorProps) 
                     {isHtmlMode ? (<><Eye className="w-4 h-4 mr-2" />Visual Mode</>) : (<><Code2 className="w-4 h-4 mr-2" />HTML Mode</>)}
                 </Button>
             </div>
+
+            <Modal
+                open={!!urlDialog}
+                onClose={() => setUrlDialog(null)}
+                size="sm"
+                title={urlDialog?.kind === 'image' ? 'Insert image' : 'Add link'}
+                footer={
+                    <>
+                        <button type="button" className="btn btn-secondary" onClick={() => setUrlDialog(null)}>Cancel</button>
+                        <button type="button" className="btn btn-primary" onClick={applyUrl}>
+                            {urlDialog?.kind === 'image' ? 'Insert' : urlDialog?.url.trim() ? 'Apply' : 'Remove link'}
+                        </button>
+                    </>
+                }
+            >
+                <form onSubmit={(e) => { e.preventDefault(); applyUrl() }}>
+                    <label className="label" htmlFor="rte-url">{urlDialog?.kind === 'image' ? 'Image URL' : 'URL'}</label>
+                    <input
+                        id="rte-url"
+                        className="field"
+                        type="url"
+                        placeholder="https://"
+                        value={urlDialog?.url ?? ''}
+                        onChange={(e) => setUrlDialog((d) => (d ? { ...d, url: e.target.value } : d))}
+                        autoFocus
+                    />
+                    {urlDialog?.kind === 'link' && <p className="hint">Select text first to turn it into a link. Leave empty to remove the link.</p>}
+                </form>
+            </Modal>
         </div>
     )
 }

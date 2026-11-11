@@ -3,6 +3,7 @@ import { Clock, FileEdit, FolderOpen, Pencil, Send, Trash2 } from 'lucide-react'
 import type { GeneratedContent } from '../lib/api'
 import { useContentActions } from '../lib/content-actions'
 import { BulkActionBar, StatusBadge } from './ui'
+import { useConfirm } from './Modal'
 
 interface ContentTableProps {
     contents: GeneratedContent[]
@@ -15,18 +16,24 @@ interface ContentTableProps {
 /** Floating bar with mass actions for the current selection. */
 export function ContentBulkBar({ selected, onClear }: { selected: Set<string>; onClear: () => void }) {
     const { setStatus, remove, isBusy } = useContentActions({ onDone: onClear })
+    const confirm = useConfirm()
     const ids = Array.from(selected)
     const n = ids.length
+    const plural = (count: number) => `${count} article${count === 1 ? '' : 's'}`
 
     return (
         <BulkActionBar count={n} onClear={onClear}>
             <button
                 className="btn btn-sm bg-emerald-500 text-white hover:bg-emerald-600"
                 disabled={isBusy}
-                onClick={() => {
-                    if (confirm(`Publish ${n} article(s) now? They go live immediately, outside the auto-publish queue.`)) {
-                        setStatus.mutate({ ids, status: 'published' })
-                    }
+                onClick={async () => {
+                    const ok = await confirm({
+                        title: `Publish ${plural(n)} now?`,
+                        message: 'They go live immediately, outside the auto-publish queue.',
+                        confirmText: 'Publish now',
+                        tone: 'primary',
+                    })
+                    if (ok) setStatus.mutate({ ids, status: 'published' })
                 }}
             >
                 <Send /> Publish now
@@ -40,8 +47,9 @@ export function ContentBulkBar({ selected, onClear }: { selected: Set<string>; o
             <button
                 className="btn btn-sm text-red-300 hover:bg-red-500/15 hover:text-red-200"
                 disabled={isBusy}
-                onClick={() => {
-                    if (confirm(`Delete ${n} article(s)? This cannot be undone.`)) remove.mutate(ids)
+                onClick={async () => {
+                    const ok = await confirm({ title: `Delete ${plural(n)}?`, message: 'This cannot be undone.', confirmText: 'Delete' })
+                    if (ok) remove.mutate(ids)
                 }}
             >
                 <Trash2 /> Delete
@@ -57,6 +65,7 @@ function formatDate(value?: string) {
 
 export function ContentTable({ contents, selected, onToggle, onToggleAll, projectNames }: ContentTableProps) {
     const { setStatus, remove, isBusy } = useContentActions()
+    const confirm = useConfirm()
     const ids = contents.map((c) => c.id)
     const allSelected = ids.length > 0 && ids.every((id) => selected.has(id))
     const someSelected = !allSelected && ids.some((id) => selected.has(id))
@@ -175,8 +184,9 @@ export function ContentTable({ contents, selected, onToggle, onToggleAll, projec
                                 <button
                                     className="btn btn-danger-ghost btn-sm btn-icon"
                                     disabled={isBusy}
-                                    onClick={() => {
-                                        if (confirm(`Delete "${content.title}"?`)) remove.mutate([content.id])
+                                    onClick={async () => {
+                                        const ok = await confirm({ title: `Delete "${content.title}"?`, message: 'This cannot be undone.', confirmText: 'Delete' })
+                                        if (ok) remove.mutate([content.id])
                                     }}
                                     title="Delete"
                                 >

@@ -1,17 +1,36 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
+import { PageHeader } from '../../components/ui';
 import { Card } from '@heroui/react';
-import { Book, Key, Code as CodeIcon, FileCode, Building2 } from 'lucide-react';
+import { Key, Code as CodeIcon, FileCode, Building2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { useState } from 'react';
 
 export const Route = createFileRoute('/projects/$projectId_/api-docs')({
   component: ProjectApiDocsPage,
+  beforeLoad: async () => {
+    if (!localStorage.getItem('auth_token')) {
+      throw redirect({ to: '/login' });
+    }
+  },
 });
 
-export function ProjectApiDocsPage() {
+/**
+ * Absolute API base URL for copy-paste examples. VITE_API_URL may be relative ("/api")
+ * or missing; resolve it against the current site instead of assuming localhost.
+ */
+function resolveApiUrl(): string {
+  const configured = import.meta.env.VITE_API_URL || '/api';
+  try {
+    return new URL(configured, window.location.origin).toString().replace(/\/$/, '');
+  } catch {
+    return `${window.location.origin}/api`;
+  }
+}
+
+function ProjectApiDocsPage() {
   const { projectId } = Route.useParams();
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+  const apiUrl = resolveApiUrl();
   const [activeTab, setActiveTab] = useState<'organization' | 'project'>('organization');
   const [activeCodeTab, setActiveCodeTab] = useState<'org-examples' | 'project-examples'>('org-examples');
 
@@ -27,15 +46,13 @@ export function ProjectApiDocsPage() {
   const organizationId = project?.organizationId || 'your-org-id';
 
   return (
-    <div className="p-8">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div className="flex items-center gap-3">
-          <Book className="w-8 h-8" />
-          <div>
-            <h1 className="text-3xl font-bold">API Documentation</h1>
-            <p className="text-gray-600 mt-1">Programmatic access to your generated content</p>
-          </div>
-        </div>
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="space-y-6">
+        <PageHeader
+          back={{ to: '/projects/$projectId', params: { projectId }, label: project?.name ? `Back to ${project.name}` : 'Back to project' }}
+          title="API documentation"
+          description={<>Read this project&apos;s published content from your website. Base URL: <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs break-all text-gray-800">{apiUrl}</code></>}
+        />
 
         {/* Authentication */}
         <Card className="p-6">
@@ -92,7 +109,7 @@ export function ProjectApiDocsPage() {
               <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
                   <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-mono rounded">GET</span>
-                  <code className="text-sm">/public/organizations/{"{"}organizationId{"}"}/categories</code>
+                  <code className="text-sm break-all">/public/organizations/{"{"}organizationId{"}"}/categories</code>
                 </div>
                 <p className="text-sm">Get all categories for an organization.</p>
 
@@ -121,7 +138,7 @@ export function ProjectApiDocsPage() {
               <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
                   <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-mono rounded">GET</span>
-                  <code className="text-sm">/public/organizations/{"{"}organizationId{"}"}/categories/{"{"}categoryIdOrSlug{"}"}/contents</code>
+                  <code className="text-sm break-all">/public/organizations/{"{"}organizationId{"}"}/categories/{"{"}categoryIdOrSlug{"}"}/contents</code>
                 </div>
                 <p className="text-sm">Get all contents from projects that belong to a specific category. You can use either the category ID or slug.</p>
 
@@ -164,7 +181,7 @@ export function ProjectApiDocsPage() {
               <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
                   <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-mono rounded">GET</span>
-                  <code className="text-sm">/public/organizations/{"{"}organizationId{"}"}/projects</code>
+                  <code className="text-sm break-all">/public/organizations/{"{"}organizationId{"}"}/projects</code>
                 </div>
                 <p className="text-sm">Get all projects for an organization.</p>
 
@@ -197,7 +214,7 @@ export function ProjectApiDocsPage() {
               <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
                   <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-mono rounded">GET</span>
-                  <code className="text-sm">/public/organizations/{"{"}organizationId{"}"}/contents</code>
+                  <code className="text-sm break-all">/public/organizations/{"{"}organizationId{"}"}/contents</code>
                 </div>
                 <p className="text-sm">Get all contents for an organization with pagination and filtering.</p>
 
@@ -248,7 +265,7 @@ export function ProjectApiDocsPage() {
               <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
                   <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-mono rounded">GET</span>
-                  <code className="text-sm">/public/projects/{"{"}projectId{"}"}/contents</code>
+                  <code className="text-sm break-all">/public/projects/{"{"}projectId{"}"}/contents</code>
                 </div>
                 <p className="text-sm">Get all contents for a specific project with pagination and filtering.</p>
 
@@ -290,7 +307,7 @@ export function ProjectApiDocsPage() {
               <div className="space-y-3">
                 <div className="flex items-baseline gap-2">
                   <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-mono rounded">GET</span>
-                  <code className="text-sm">/public/contents/{"{"}idOrSlug{"}"}</code>
+                  <code className="text-sm break-all">/public/contents/{"{"}idOrSlug{"}"}</code>
                 </div>
                 <p className="text-sm">Get a single content item by ID or Slug.</p>
 
