@@ -66,7 +66,7 @@ export function ContentTable({ contents, selected, onToggle, onToggleAll, projec
     return (
         <div>
             {/* Header row */}
-            <div className="hidden grid-cols-[2rem_minmax(0,1fr)_7.5rem_7rem_auto] items-center gap-4 border-b border-gray-100 bg-gray-50/70 px-5 py-2.5 text-xs font-medium tracking-wide text-gray-500 uppercase md:grid">
+            <div className="hidden grid-cols-[2rem_minmax(0,1fr)_7.5rem_7rem_14rem] items-center gap-4 border-b border-gray-100 bg-gray-50/70 px-5 py-2.5 text-xs font-medium tracking-wide text-gray-500 uppercase md:grid">
                 <input
                     type="checkbox"
                     className="checkbox"
@@ -90,7 +90,7 @@ export function ContentTable({ contents, selected, onToggle, onToggleAll, projec
                     return (
                         <li
                             key={content.id}
-                            className={`grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-4 gap-y-3 px-5 py-4 transition-colors md:grid-cols-[2rem_minmax(0,1fr)_7.5rem_7rem_auto] md:items-center ${isSelected ? 'bg-blue-50/60' : 'hover:bg-gray-50/70'}`}
+                            className={`grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-4 gap-y-3 px-5 py-4 transition-colors md:grid-cols-[2rem_minmax(0,1fr)_7.5rem_7rem_14rem] md:items-center ${isSelected ? 'bg-blue-50/60' : 'hover:bg-gray-50/70'}`}
                         >
                             <input
                                 type="checkbox"

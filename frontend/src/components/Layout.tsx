@@ -1,6 +1,8 @@
 import { Link, Outlet } from '@tanstack/react-router';
 import { useAuth } from '../contexts/auth-context';
-import { LogOut, FolderKanban, Shield, FileText, FileEdit, LayoutDashboard } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { LogOut, FolderKanban, Shield, FileText, FileEdit, LayoutDashboard, Sparkles } from 'lucide-react';
+import { WhatsNewModal, hasSeenWhatsNew } from './WhatsNewModal';
 import { OrganizationSwitcher } from './OrganizationSwitcher';
 
 const linkBase =
@@ -34,6 +36,14 @@ function NavLinks({ isSuperAdmin }: { isSuperAdmin?: boolean }) {
 
 export default function Layout() {
     const { user, logout, isAuthenticated } = useAuth();
+    const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+
+    // Announce new features once per device per release, right after login
+    useEffect(() => {
+        if (isAuthenticated && !hasSeenWhatsNew()) {
+            setWhatsNewOpen(true);
+        }
+    }, [isAuthenticated]);
     const initials = (user?.name || user?.email || '?')
         .split(/\s+/)
         .map((part) => part[0])
@@ -70,6 +80,14 @@ export default function Layout() {
                         <div className="flex items-center gap-2">
                             {isAuthenticated && user ? (
                                 <>
+                                    <button
+                                        onClick={() => setWhatsNewOpen(true)}
+                                        className="btn btn-ghost btn-sm text-blue-700 hover:!bg-blue-50 hover:!text-blue-800"
+                                        title="What's new"
+                                    >
+                                        <Sparkles />
+                                        <span className="hidden sm:inline">What&apos;s new</span>
+                                    </button>
                                     <div className="flex items-center gap-2.5">
                                         <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
                                             {initials}
@@ -114,6 +132,8 @@ export default function Layout() {
             <main>
                 <Outlet />
             </main>
+
+            <WhatsNewModal open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
         </div>
     );
 }
