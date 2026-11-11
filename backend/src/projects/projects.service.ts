@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { Project } from '../entities/project.entity';
+import { Project, ProjectType } from '../entities/project.entity';
 import { OrganizationMember } from '../entities/organization-member.entity';
 import { GeneratedContent } from '../entities/generated-content.entity';
 import { Category } from '../entities/category.entity';
@@ -27,9 +27,20 @@ export class ProjectsService {
 
         // Extract categoryIds from DTO
         const { categoryIds, ...projectData } = createProjectDto;
+        const type = projectData.type ?? ProjectType.MASS;
+
+        if (type === ProjectType.MASS && !projectData.template?.trim()) {
+            throw new BadRequestException('Template is required for mass projects');
+        }
 
         const project = this.projectRepository.create({
             ...projectData,
+            type,
+            // Manual projects have no templates; the column is NOT NULL
+            template: type === ProjectType.MASS ? projectData.template : '',
+            ...(type === ProjectType.MANUAL
+                ? { titleTemplate: undefined, metaDescriptionTemplate: undefined, tagsTemplate: undefined, slugTemplate: undefined }
+                : {}),
             createdById: userId,
         });
 
@@ -110,7 +121,7 @@ export class ProjectsService {
         await this.checkOrgMembership(project.organizationId, userId);
 
         // Handle category update if categoryIds provided
-        const { categoryIds, ...updateData } = updateProjectDto as any;
+        const { categoryIds, type: _ignoredType, ...updateData } = updateProjectDto as any;
 
         if (categoryIds !== undefined) {
             if (categoryIds.length > 0) {

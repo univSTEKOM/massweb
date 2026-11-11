@@ -1,7 +1,8 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '../contexts/auth-context';
 import { useEffect, useState } from 'react';
-import { LogOut, FolderKanban, Shield, FileText, FileEdit, LayoutDashboard, Megaphone } from 'lucide-react';
+import { LogOut, FolderKanban, Shield, FileText, FileEdit, LayoutDashboard, Megaphone, Tags } from 'lucide-react';
+import { useOrganization } from '../contexts/organization-context';
 import { WhatsNewModal, hasSeenWhatsNew } from './WhatsNewModal';
 import { OrganizationSwitcher } from './OrganizationSwitcher';
 
@@ -10,6 +11,7 @@ const linkBase =
 const linkActive = { className: '!bg-blue-50 !text-blue-700' };
 
 function NavLinks({ isSuperAdmin }: { isSuperAdmin?: boolean }) {
+    const { currentOrganization } = useOrganization();
     return (
         <>
             <Link to="/projects" className={linkBase} activeProps={linkActive}>
@@ -24,6 +26,17 @@ function NavLinks({ isSuperAdmin }: { isSuperAdmin?: boolean }) {
                 <FileEdit className="h-4 w-4" />
                 Drafts
             </Link>
+            {currentOrganization && (
+                <Link
+                    to="/organizations/$organizationId/categories"
+                    params={{ organizationId: currentOrganization.id }}
+                    className={linkBase}
+                    activeProps={linkActive}
+                >
+                    <Tags className="h-4 w-4" />
+                    Categories
+                </Link>
+            )}
             {isSuperAdmin && (
                 <Link to="/admin/organizations" className={linkBase} activeProps={{ className: '!bg-purple-50 !text-purple-700' }}>
                     <Shield className="h-4 w-4" />

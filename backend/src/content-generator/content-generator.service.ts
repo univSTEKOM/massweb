@@ -5,7 +5,7 @@ import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import * as Handlebars from 'handlebars';
 import { GeneratedContent, PublishStatus } from '../entities/generated-content.entity';
-import { Project } from '../entities/project.entity';
+import { Project, ProjectType } from '../entities/project.entity';
 import { CsvRow } from '../entities/csv-row.entity';
 import { CsvColumn } from '../entities/csv-column.entity';
 import { CreateSingleContentDto } from './dto/single-content.dto';
@@ -38,6 +38,7 @@ export class ContentGeneratorService {
         if (!project) {
             throw new Error('Project not found');
         }
+        this.assertMassProject(project);
 
         // Count rows instead of loading them all
         const totalRows = await this.csvRowRepository.count({
@@ -65,6 +66,7 @@ export class ContentGeneratorService {
         if (!project) {
             throw new Error('Project not found');
         }
+        this.assertMassProject(project);
 
         // Clear existing mass-generated content; single (manual) articles are kept
         await this.contentRepository.delete({ projectId, isManual: false });
@@ -540,6 +542,14 @@ export class ContentGeneratorService {
             deleted += result.affected ?? 0;
         }
         return { deleted };
+    }
+
+    private assertMassProject(project: Project) {
+        if (project.type === ProjectType.MANUAL) {
+            throw new BadRequestException(
+                'This is a manual project: it has no import or templates. Add articles one by one instead.',
+            );
+        }
     }
 
     private assertManualStatus(status: PublishStatus) {

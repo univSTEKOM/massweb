@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { Project } from '../entities/project.entity';
+import { Project, ProjectType } from '../entities/project.entity';
 import { CsvColumn } from '../entities/csv-column.entity';
 import { CsvRow } from '../entities/csv-row.entity';
 
@@ -23,6 +23,11 @@ export class CsvService {
         rowCount: number;
         totalCombinations: number;
     }> {
+        const project = await this.projectRepository.findOne({ where: { id: projectId }, select: ['id', 'type'] });
+        if (project?.type === ProjectType.MANUAL) {
+            throw new BadRequestException('Manual projects do not use CSV/Excel import');
+        }
+
         const fileName = file.originalname.toLowerCase();
         let data: Record<string, string>[];
         let headers: string[];

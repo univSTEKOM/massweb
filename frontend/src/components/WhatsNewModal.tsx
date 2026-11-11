@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, ChevronRight as Arrow, Megaphone, X } from '
  * so a new device (or a fresh browser) sees it right after logging in. Bump RELEASE_ID
  * and replace SLIDES when announcing the next set of features.
  */
-export const WHATS_NEW_RELEASE_ID = '2026-11-single-article'
+export const WHATS_NEW_RELEASE_ID = '2026-11-manual-projects'
 const STORAGE_KEY = 'massweb_whats_new_seen'
 
 interface Slide {
@@ -27,10 +27,24 @@ const SLIDES: Slide[] = [
         description:
             'Artikel kini bisa disimpan sebagai draft dalam jumlah banyak, dipublish manual kapan pun Anda siap, dan dibuat satu per satu di luar generate massal.',
         bullets: [
+            'Tipe project baru: Manual. Tanpa import Excel, artikel ditulis satu per satu.',
+            'Menu Categories kini ada langsung di navbar.',
             'Buat artikel satuan dari template project atau tulis manual.',
             'Status baru Draft: tidak pernah ikut Auto Publish dan tidak muncul di public API.',
             'Panel Auto Publish dan Manual Publish kini dipisah di halaman project.',
             'Halaman baru Drafts untuk meninjau & publish draft dari semua project.',
+        ],
+    },
+    {
+        image: '/whats-new/manual-project.png',
+        title: 'Project manual',
+        description:
+            'Satu organisasi kini bisa punya dua tipe project. Project Mass tetap seperti biasa (import CSV/Excel + template). Project Manual tidak perlu import atau template: isinya artikel yang ditulis satu per satu.',
+        path: ['Projects', 'New project', 'Project type', 'Manual project', 'Create manual project'],
+        bullets: [
+            'Artikel manual tetap bisa ditambahkan ke project Mass.',
+            'Filter All / Mass / Manual tersedia di daftar project.',
+            'Kelola kategori lewat menu Categories di navbar.',
         ],
     },
     {

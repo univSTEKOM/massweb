@@ -2,14 +2,14 @@ import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import { Spinner } from '@heroui/react'
-import { Book, CheckCircle2, Clock, FileEdit, FileText, Layers, Plus, Search } from 'lucide-react'
+import { Book, CheckCircle2, Clock, FileEdit, FileText, Layers, PenLine, Plus, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { projectsApi, contentApi, type PublishStatus } from '../../lib/api'
 import { ExportMenu } from '../../components/ExportMenu'
 import { PublishJobControl } from '../../components/PublishJobControl'
 import { ManualPublishPanel } from '../../components/ManualPublishPanel'
 import { ContentTable, ContentBulkBar } from '../../components/ContentTable'
-import { PageHeader, Pagination, StatTile, formatNumber } from '../../components/ui'
+import { PageHeader, Pagination, ProjectTypeBadge, StatTile, formatNumber } from '../../components/ui'
 import { toggleInSet } from '../../lib/content-actions'
 
 export const Route = createFileRoute('/projects/$projectId')({
@@ -135,7 +135,12 @@ function ProjectDetailPage() {
                         />
                     ) : undefined
                 }
-                title={project.name}
+                title={
+                    <span className="inline-flex flex-wrap items-center gap-3">
+                        {project.name}
+                        <ProjectTypeBadge type={project.type} />
+                    </span>
+                }
                 description={
                     <div className="space-y-2.5">
                         {project.description && <p>{project.description}</p>}
@@ -229,7 +234,20 @@ function ProjectDetailPage() {
                         <Spinner />
                     </div>
                 ) : !contentsData || contentsData.contents.length === 0 ? (
-                    isProjectEmpty && !debouncedSearch ? (
+                    isProjectEmpty && !debouncedSearch && project.type === 'manual' ? (
+                        <div className="mx-auto max-w-md px-4 py-14 text-center">
+                            <span className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                                <PenLine className="h-6 w-6" />
+                            </span>
+                            <h3 className="text-base font-semibold text-gray-900">No articles yet</h3>
+                            <p className="mt-1 text-sm text-gray-500">
+                                This is a manual project. Write articles one by one, no import needed.
+                            </p>
+                            <Link to="/contents/new" search={{ projectId }} className="btn btn-primary mt-5">
+                                <Plus /> Write your first article
+                            </Link>
+                        </div>
+                    ) : isProjectEmpty && !debouncedSearch ? (
                         <div className="mx-auto max-w-md px-4 py-14 text-center">
                             <span className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                                 <Layers className="h-6 w-6" />
@@ -275,3 +293,4 @@ function ProjectDetailPage() {
         </div>
     )
 }
+

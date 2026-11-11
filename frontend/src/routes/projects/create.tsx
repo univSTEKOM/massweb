@@ -2,9 +2,9 @@ import { createFileRoute, useNavigate, redirect, Link } from '@tanstack/react-ro
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { projectsApi, csvApi, contentApi, categoriesApi } from '../../lib/api'
-import type { Category } from '../../lib/api'
+import type { Category, ProjectType } from '../../lib/api'
 import { useDropzone } from 'react-dropzone'
-import { Upload, Layers, Copy, Building2, Tag, Plus, FileEdit, Clock } from 'lucide-react'
+import { Upload, Layers, Copy, Building2, Tag, Plus, FileEdit, Clock, PenLine, ArrowRight } from 'lucide-react'
 import { PageHeader } from '../../components/ui'
 import { RichTextEditor } from '../../components/RichTextEditor'
 import { ThumbnailUpload } from '../../components/ThumbnailUpload'
@@ -25,6 +25,8 @@ export const Route = createFileRoute('/projects/create')({
 function CreateProjectPage() {
     const navigate = useNavigate()
     const { currentOrganization } = useOrganization()
+    const [projectType, setProjectType] = useState<ProjectType>('mass')
+    const isManual = projectType === 'manual'
 
     const [formData, setFormData] = useState({
         name: '',
@@ -78,7 +80,7 @@ function CreateProjectPage() {
             const validationErrors: string[] = []
             if (!currentOrganization) validationErrors.push('No organization selected')
             if (!formData.name.trim()) validationErrors.push('Project name is required')
-            if (!formData.template.trim()) validationErrors.push('Template is required')
+            if (!isManual && !formData.template.trim()) validationErrors.push('Template is required')
 
             if (validationErrors.length > 0) {
                 throw new Error(validationErrors.join(', '))
@@ -88,11 +90,20 @@ function CreateProjectPage() {
 
             try {
                 // Create project payload with current organization and category IDs
-                const projectPayload = {
-                    ...formData,
-                    organizationId: currentOrganization!.id,
-                    categoryIds: selectedCategoryIds,
-                }
+                const projectPayload = isManual
+                    ? {
+                        name: formData.name,
+                        description: formData.description,
+                        type: 'manual' as const,
+                        organizationId: currentOrganization!.id,
+                        categoryIds: selectedCategoryIds,
+                    }
+                    : {
+                        ...formData,
+                        type: 'mass' as const,
+                        organizationId: currentOrganization!.id,
+                        categoryIds: selectedCategoryIds,
+                    }
 
                 console.log('Creating project...', projectPayload)
                 const projectResponse = await Promise.race([
@@ -110,6 +121,12 @@ function CreateProjectPage() {
                     console.log('Uploading thumbnail...')
                     await projectsApi.uploadThumbnail(project.id, thumbnailFile)
                     console.log('Thumbnail uploaded')
+                }
+
+                // Manual projects: no import and no generation, go straight to the project
+                if (isManual) {
+                    navigate({ to: '/projects/$projectId', params: { projectId: project.id } })
+                    return { project }
                 }
 
                 if (csvFile) {
@@ -146,6 +163,10 @@ function CreateProjectPage() {
         },
         onSuccess: ({ project }) => {
             console.log('Success! Project created:', project.id)
+            if (isManual) {
+                toast.success('Manual project created. Add your first article.')
+                return
+            }
             setSuccessMessage('Project created and content generated successfully! Redirecting...')
             toast.success('Content generated successfully!')
         },
@@ -252,6 +273,43 @@ function CreateProjectPage() {
             )}
 
             <div className="space-y-6">
+                {/* Project type */}
+                <div className="surface p-5 sm:p-6">
+                    <h2 className="mb-1 text-lg font-semibold tracking-tight text-gray-900">Project type</h2>
+                    <p className="mb-4 text-sm text-gray-500">Choose how articles in this project are created. This cannot be changed later.</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {([
+                            {
+                                value: 'mass' as const,
+                                icon: <Layers className="h-4 w-4" />,
+                                title: 'Mass project',
+                                desc: 'Import a CSV/Excel file and generate many articles from a template.',
+                            },
+                            {
+                                value: 'manual' as const,
+                                icon: <PenLine className="h-4 w-4" />,
+                                title: 'Manual project',
+                                desc: 'No import or template. Write articles one by one.',
+                            },
+                        ]).map((opt) => (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setProjectType(opt.value)}
+                                className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${projectType === opt.value ? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-500/15' : 'border-gray-200 hover:border-gray-300'}`}
+                            >
+                                <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${projectType === opt.value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                                    {opt.icon}
+                                </span>
+                                <span>
+                                    <span className="block text-sm font-semibold text-gray-900">{opt.title}</span>
+                                    <span className="mt-0.5 block text-sm text-gray-500">{opt.desc}</span>
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
                 <div className="surface p-5 sm:p-6">
                     <h2 className="mb-5 text-lg font-semibold tracking-tight text-gray-900">Project Details</h2>
                     <div className="space-y-4">
@@ -368,6 +426,8 @@ function CreateProjectPage() {
                     </div>
                 </div>
 
+                {!isManual && (
+                <>
                 <div className="surface p-5 sm:p-6">
                     <h2 className="mb-5 text-lg font-semibold tracking-tight text-gray-900">
                         Upload Data File
@@ -523,6 +583,9 @@ function CreateProjectPage() {
                     </div>
                 </div>
 
+                </>
+                )}
+
                 <div className="flex justify-end gap-3">
                     <button className="btn btn-secondary btn-lg" onClick={() => navigate({ to: '/projects' })}>
                         Cancel
@@ -532,8 +595,14 @@ function CreateProjectPage() {
                         onClick={handleSubmit}
                         disabled={!formData.name || createProjectMutation.isPending}
                     >
-                        <Layers />
-                        {createProjectMutation.isPending ? 'Processing...' : generateAsDraft ? 'Create & generate drafts' : 'Create & generate'}
+                        {isManual ? <ArrowRight /> : <Layers />}
+                        {createProjectMutation.isPending
+                            ? 'Processing...'
+                            : isManual
+                                ? 'Create manual project'
+                                : generateAsDraft
+                                    ? 'Create & generate drafts'
+                                    : 'Create & generate'}
                     </button>
                 </div>
             </div>
