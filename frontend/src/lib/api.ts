@@ -22,7 +22,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
+        // A 401 from the login/register request itself means wrong credentials, not an
+        // expired session: let the form show the error instead of reloading the page.
+        const url: string = error.config?.url || '';
+        const isAuthAttempt = url.includes('/auth/login') || url.includes('/auth/register');
+        if (error.response?.status === 401 && !isAuthAttempt) {
             localStorage.removeItem('auth_token');
             localStorage.removeItem('user');
             window.location.href = '/login';
@@ -137,7 +141,28 @@ export interface GeneratedContent {
     slug: string;
     publishStatus: PublishStatus;
     publishedAt?: string;
+    /** true for single articles created by hand (kept when the project is regenerated) */
+    isManual?: boolean;
     createdAt: string;
+}
+
+export interface RenderedTemplate {
+    title: string;
+    content: string;
+    metaDescription: string;
+    tags: string;
+    slug: string;
+}
+
+export interface CreateSingleContentRequest {
+    title?: string;
+    content?: string;
+    metaDescription?: string;
+    tags?: string;
+    slug?: string;
+    thumbnailUrl?: string;
+    status?: ManualPublishStatus;
+    variables?: Record<string, string>;
 }
 
 // Projects API
@@ -215,6 +240,15 @@ export const contentApi = {
         api.post<{ updated: number }>(`/content-generator/contents/bulk-status`, { contentIds, status }),
     bulkDelete: (contentIds: string[]) =>
         api.post<{ deleted: number }>(`/content-generator/contents/bulk-delete`, { contentIds }),
+    /** Variables a single article can fill in (CSV columns + template variables). */
+    getTemplateFields: (projectId: string) =>
+        api.get<{ fields: string[] }>(`/content-generator/projects/${projectId}/template-fields`),
+    /** Render the project templates for one set of values, without saving. */
+    renderTemplate: (projectId: string, variables: Record<string, string>) =>
+        api.post<RenderedTemplate>(`/content-generator/projects/${projectId}/render-template`, { variables }),
+    /** Create one article by hand inside a project (outside mass generation). */
+    createSingle: (projectId: string, data: CreateSingleContentRequest) =>
+        api.post<GeneratedContent>(`/content-generator/projects/${projectId}/contents`, data),
     /** Mass status change for a whole project, e.g. all pending -> draft. */
     projectBulkStatus: (projectId: string, from: PublishStatus, to: ManualPublishStatus) =>
         api.post<{ updated: number }>(`/content-generator/projects/${projectId}/bulk-status`, { from, to }),

@@ -280,7 +280,7 @@ function ContentEditPage() {
                 <div>
                   <p className="mb-2 text-xs font-medium tracking-wide text-gray-500 uppercase">Rendered HTML</p>
                   <div
-                    className="prose-sm max-h-96 overflow-auto rounded-lg border border-gray-200 bg-white p-4"
+                    className="prose prose-sm max-h-96 overflow-auto rounded-lg border border-gray-200 bg-white p-4"
                     dangerouslySetInnerHTML={{ __html: formData.htmlContent }}
                   />
                 </div>

@@ -10,11 +10,12 @@ import { ContentGenerationProcessor, ContentPublishingProcessor } from './conten
 import { GeneratedContent } from '../entities/generated-content.entity';
 import { Project } from '../entities/project.entity';
 import { CsvRow } from '../entities/csv-row.entity';
+import { CsvColumn } from '../entities/csv-column.entity';
 import { PublishJob } from '../entities/publish-job.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([GeneratedContent, Project, CsvRow, PublishJob]),
+        TypeOrmModule.forFeature([GeneratedContent, Project, CsvRow, CsvColumn, PublishJob]),
         BullModule.registerQueue(
             { name: 'content-generation' },
             { name: 'content-publishing' },

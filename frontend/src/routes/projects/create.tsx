@@ -4,7 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { projectsApi, csvApi, contentApi, categoriesApi } from '../../lib/api'
 import type { Category } from '../../lib/api'
 import { useDropzone } from 'react-dropzone'
-import { Upload, Sparkles, Copy, Building2, Tag, Plus, FileEdit, Clock } from 'lucide-react'
+import { Upload, Layers, Copy, Building2, Tag, Plus, FileEdit, Clock } from 'lucide-react'
 import { PageHeader } from '../../components/ui'
 import { RichTextEditor } from '../../components/RichTextEditor'
 import { ThumbnailUpload } from '../../components/ThumbnailUpload'
@@ -532,7 +532,7 @@ function CreateProjectPage() {
                         onClick={handleSubmit}
                         disabled={!formData.name || createProjectMutation.isPending}
                     >
-                        <Sparkles />
+                        <Layers />
                         {createProjectMutation.isPending ? 'Processing...' : generateAsDraft ? 'Create & generate drafts' : 'Create & generate'}
                     </button>
                 </div>

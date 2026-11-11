@@ -16,6 +16,7 @@ import { ContentGeneratorService } from './content-generator.service';
 import { ExportService } from './export.service';
 import { GeneratedContent } from '../entities/generated-content.entity';
 import { BulkDeleteDto, BulkStatusDto, GenerateContentDto, ProjectBulkStatusDto } from './dto/bulk-content.dto';
+import { CreateSingleContentDto, RenderTemplateDto } from './dto/single-content.dto';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 
@@ -61,6 +62,26 @@ export class ContentGeneratorController {
         @Body() body: ProjectBulkStatusDto,
     ) {
         return await this.contentGeneratorService.bulkUpdateProjectStatus(projectId, body.from, body.to);
+    }
+
+    /* ---------------- Single (manual) articles ---------------- */
+
+    /** Variables a single article can fill in (CSV columns + template variables). */
+    @Get('projects/:projectId/template-fields')
+    async getTemplateFields(@Param('projectId') projectId: string) {
+        return await this.contentGeneratorService.getTemplateFields(projectId);
+    }
+
+    /** Render the project templates for one set of values, without saving. */
+    @Post('projects/:projectId/render-template')
+    async renderTemplate(@Param('projectId') projectId: string, @Body() body: RenderTemplateDto) {
+        return await this.contentGeneratorService.renderTemplate(projectId, body.variables);
+    }
+
+    /** Create one article by hand (kept when the project is regenerated). */
+    @Post('projects/:projectId/contents')
+    async createSingleContent(@Param('projectId') projectId: string, @Body() body: CreateSingleContentDto) {
+        return await this.contentGeneratorService.createSingleContent(projectId, body);
     }
 
     @Get('projects/:projectId/contents')

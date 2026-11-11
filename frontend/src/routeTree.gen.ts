@@ -19,6 +19,7 @@ import { Route as AdminOrganizationsRouteImport } from './routes/admin/organizat
 import { Route as AdminUsersRouteImport } from './routes/admin/users'
 import { Route as ContentsIndexRouteImport } from './routes/contents/index'
 import { Route as ContentsContentIdRouteImport } from './routes/contents/$contentId'
+import { Route as ContentsNewRouteImport } from './routes/contents/new'
 import { Route as OrganizationsCreateRouteImport } from './routes/organizations/create'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
@@ -77,6 +78,11 @@ const ContentsIndexRoute = ContentsIndexRouteImport.update({
 const ContentsContentIdRoute = ContentsContentIdRouteImport.update({
   id: '/contents/$contentId',
   path: '/contents/$contentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContentsNewRoute = ContentsNewRouteImport.update({
+  id: '/contents/new',
+  path: '/contents/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrganizationsCreateRoute = OrganizationsCreateRouteImport.update({
@@ -140,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/admin/organizations': typeof AdminOrganizationsRoute
   '/admin/users': typeof AdminUsersRoute
   '/contents/$contentId': typeof ContentsContentIdRoute
+  '/contents/new': typeof ContentsNewRoute
   '/organizations/create': typeof OrganizationsCreateRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/create': typeof ProjectsCreateRoute
@@ -161,6 +168,7 @@ export interface FileRoutesByTo {
   '/admin/organizations': typeof AdminOrganizationsRoute
   '/admin/users': typeof AdminUsersRoute
   '/contents/$contentId': typeof ContentsContentIdRoute
+  '/contents/new': typeof ContentsNewRoute
   '/organizations/create': typeof OrganizationsCreateRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/create': typeof ProjectsCreateRoute
@@ -183,6 +191,7 @@ export interface FileRoutesById {
   '/admin/organizations': typeof AdminOrganizationsRoute
   '/admin/users': typeof AdminUsersRoute
   '/contents/$contentId': typeof ContentsContentIdRoute
+  '/contents/new': typeof ContentsNewRoute
   '/organizations/create': typeof OrganizationsCreateRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/create': typeof ProjectsCreateRoute
@@ -206,6 +215,7 @@ export interface FileRouteTypes {
     | '/admin/organizations'
     | '/admin/users'
     | '/contents/$contentId'
+    | '/contents/new'
     | '/organizations/create'
     | '/projects/$projectId'
     | '/projects/create'
@@ -227,6 +237,7 @@ export interface FileRouteTypes {
     | '/admin/organizations'
     | '/admin/users'
     | '/contents/$contentId'
+    | '/contents/new'
     | '/organizations/create'
     | '/projects/$projectId'
     | '/projects/create'
@@ -248,6 +259,7 @@ export interface FileRouteTypes {
     | '/admin/organizations'
     | '/admin/users'
     | '/contents/$contentId'
+    | '/contents/new'
     | '/organizations/create'
     | '/projects/$projectId'
     | '/projects/create'
@@ -267,6 +279,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   ContentsContentIdRoute: typeof ContentsContentIdRoute
+  ContentsNewRoute: typeof ContentsNewRoute
   OrganizationsCreateRoute: typeof OrganizationsCreateRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
   ProjectsCreateRoute: typeof ProjectsCreateRoute
@@ -349,6 +362,13 @@ declare module '@tanstack/react-router' {
       path: '/contents/$contentId'
       fullPath: '/contents/$contentId'
       preLoaderRoute: typeof ContentsContentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contents/new': {
+      id: '/contents/new'
+      path: '/contents/new'
+      fullPath: '/contents/new'
+      preLoaderRoute: typeof ContentsNewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/organizations/create': {
@@ -438,6 +458,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   ContentsContentIdRoute: ContentsContentIdRoute,
+  ContentsNewRoute: ContentsNewRoute,
   OrganizationsCreateRoute: OrganizationsCreateRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
   ProjectsCreateRoute: ProjectsCreateRoute,

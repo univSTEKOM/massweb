@@ -1,7 +1,7 @@
-import { Link, Outlet } from '@tanstack/react-router';
+import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { useAuth } from '../contexts/auth-context';
 import { useEffect, useState } from 'react';
-import { LogOut, FolderKanban, Shield, FileText, FileEdit, LayoutDashboard, Sparkles } from 'lucide-react';
+import { LogOut, FolderKanban, Shield, FileText, FileEdit, LayoutDashboard, Megaphone } from 'lucide-react';
 import { WhatsNewModal, hasSeenWhatsNew } from './WhatsNewModal';
 import { OrganizationSwitcher } from './OrganizationSwitcher';
 
@@ -37,6 +37,8 @@ function NavLinks({ isSuperAdmin }: { isSuperAdmin?: boolean }) {
 export default function Layout() {
     const { user, logout, isAuthenticated } = useAuth();
     const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+    const pathname = useRouterState({ select: (s) => s.location.pathname });
+    const isAuthPage = pathname === '/login' || pathname === '/register';
 
     // Announce new features once per device per release, right after login
     useEffect(() => {
@@ -50,6 +52,11 @@ export default function Layout() {
         .join('')
         .slice(0, 2)
         .toUpperCase();
+
+    // Login / register render their own full-screen layout
+    if (isAuthPage) {
+        return <Outlet />;
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -85,7 +92,7 @@ export default function Layout() {
                                         className="btn btn-ghost btn-sm text-blue-700 hover:!bg-blue-50 hover:!text-blue-800"
                                         title="What's new"
                                     >
-                                        <Sparkles />
+                                        <Megaphone />
                                         <span className="hidden sm:inline">What&apos;s new</span>
                                     </button>
                                     <div className="flex items-center gap-2.5">
