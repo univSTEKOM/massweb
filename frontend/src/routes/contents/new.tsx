@@ -59,11 +59,16 @@ function NewArticlePage() {
   }, [projects, projectId])
 
   const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId])
+  // Manual projects have no template: always write by hand
+  const isManualProject = project?.type === 'manual'
+  useEffect(() => {
+    setMode(isManualProject ? 'manual' : 'template')
+  }, [projectId, isManualProject])
 
   const { data: fieldsData, isLoading: fieldsLoading } = useQuery({
     queryKey: ['template-fields', projectId],
     queryFn: async () => (await contentApi.getTemplateFields(projectId)).data,
-    enabled: !!projectId,
+    enabled: !!projectId && !isManualProject,
   })
   const fields = fieldsData?.fields ?? []
 
@@ -105,7 +110,7 @@ function NewArticlePage() {
           tags: form.tags,
           content: form.content,
           status,
-          variables: mode === 'template' ? variables : undefined,
+          variables: mode === 'template' && !isManualProject ? variables : undefined,
         })
       ).data,
     onSuccess: (article) => {
@@ -170,12 +175,25 @@ function NewArticlePage() {
                   <select id="project" className="field" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name}
+                        {p.name} · {p.type === 'manual' ? 'Manual' : 'Mass'}
                       </option>
                     ))}
                   </select>
-                  <p className="hint">Uses this project&apos;s template, categories and thumbnail.</p>
+                  <p className="hint">
+                    {isManualProject
+                      ? "Uses this project's categories and thumbnail."
+                      : "Uses this project's template, categories and thumbnail."}
+                  </p>
                 </div>
+                {isManualProject ? (
+                  <div>
+                    <span className="label">How do you want to write it?</span>
+                    <div className="flex h-10 items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 text-sm text-violet-800">
+                      <PenLine className="h-4 w-4 shrink-0" /> Write manually
+                    </div>
+                    <p className="hint">Manual project: no import or template, write the article yourself.</p>
+                  </div>
+                ) : (
                 <div>
                   <span className="label">How do you want to write it?</span>
                   <div className="grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1">
@@ -201,11 +219,12 @@ function NewArticlePage() {
                       : 'Write the title and content yourself.'}
                   </p>
                 </div>
+                )}
               </div>
             </div>
 
             {/* 2. Template variables */}
-            {mode === 'template' && (
+            {mode === 'template' && !isManualProject && (
               <div className="surface p-5 sm:p-6">
                 <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                   <div>

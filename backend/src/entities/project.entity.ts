@@ -7,6 +7,13 @@ import { Organization } from './organization.entity';
 import { User } from './user.entity';
 import { Category } from './category.entity';
 
+export enum ProjectType {
+    // Articles are mass-generated from an uploaded CSV/Excel file + templates
+    MASS = 'mass',
+    // No import or templates: every article is written one by one
+    MANUAL = 'manual',
+}
+
 // Projects are listed/counted by organizationId, ordered by createdAt.
 @Index('idx_project_org_created', ['organizationId', 'createdAt'])
 @Entity('projects')
@@ -46,6 +53,10 @@ export class Project {
 
     @Column({ nullable: true })
     thumbnailUrl: string;
+
+    // Set at creation, never changed afterwards
+    @Column({ type: 'enum', enum: ProjectType, default: ProjectType.MASS })
+    type: ProjectType;
 
     @CreateDateColumn()
     createdAt: Date;

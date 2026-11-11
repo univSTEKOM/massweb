@@ -86,9 +86,13 @@ export interface AuthResponse {
 }
 
 // Types
+/** 'mass': CSV/Excel import + templates. 'manual': articles written one by one. */
+export type ProjectType = 'mass' | 'manual';
+
 export interface Project {
     id: string;
     name: string;
+    type?: ProjectType;
     description?: string;
     organizationId: string;
     template: string;

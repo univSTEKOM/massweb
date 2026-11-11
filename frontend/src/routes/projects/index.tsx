@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate, redirect } from '@tanstack/react-router'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
-import { projectsApi, contentApi, type Project } from '../../lib/api'
+import { projectsApi, contentApi, type Project, type ProjectType } from '../../lib/api'
+import { useState } from 'react'
 import { Plus, Calendar, FileText, CheckCircle2, Clock, Activity, Zap, BarChart3, Building2, Trash2, FileEdit, ChevronRight } from 'lucide-react'
 import { ProjectCardSkeleton } from '../../components/Skeleton'
 import { EmptyState } from '../../components/EmptyState'
-import { PageHeader, StatTile, formatNumber } from '../../components/ui'
+import { PageHeader, ProjectTypeBadge, StatTile, formatNumber } from '../../components/ui'
 import { useOrganization } from '../../contexts/organization-context'
 import toast from 'react-hot-toast'
 
@@ -29,6 +30,7 @@ function NewProjectButton() {
 function ProjectsPage() {
     const navigate = useNavigate()
     const { currentOrganization } = useOrganization()
+    const [typeFilter, setTypeFilter] = useState<'all' | ProjectType>('all')
 
     const { data: projects, isLoading, error } = useQuery({
         queryKey: ['projects', currentOrganization?.id],
@@ -85,6 +87,14 @@ function ProjectsPage() {
             </div>
         )
     }
+
+    const typeOf = (p: Project): ProjectType => p.type ?? 'mass'
+    const typeCounts = {
+        all: projects?.length ?? 0,
+        mass: projects?.filter((p) => typeOf(p) === 'mass').length ?? 0,
+        manual: projects?.filter((p) => typeOf(p) === 'manual').length ?? 0,
+    }
+    const visibleProjects = (projects ?? []).filter((p) => typeFilter === 'all' || typeOf(p) === typeFilter)
 
     const publishRate = stats && stats.totalContent > 0 ? (stats.publishedContent / stats.totalContent) * 100 : 0
 
@@ -143,11 +153,29 @@ function ProjectsPage() {
                 </div>
             )}
 
-            <div className="mb-4 flex items-end justify-between">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <h2 className="text-lg font-semibold tracking-tight text-gray-900">Your projects</h2>
                     <p className="text-sm text-gray-500">Open a project to manage, draft and publish its articles</p>
                 </div>
+                {typeCounts.all > 0 && (
+                    <div className="inline-flex self-start rounded-lg bg-gray-100 p-1 sm:self-auto">
+                        {([
+                            { key: 'all', label: 'All' },
+                            { key: 'mass', label: 'Mass' },
+                            { key: 'manual', label: 'Manual' },
+                        ] as const).map((t) => (
+                            <button
+                                key={t.key}
+                                onClick={() => setTypeFilter(t.key)}
+                                className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition ${typeFilter === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                            >
+                                {t.label}
+                                <span className="text-xs text-gray-400 tabular-nums">{typeCounts[t.key]}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {!projects || projects.length === 0 ? (
@@ -159,9 +187,16 @@ function ProjectsPage() {
                         action={{ label: 'Create project', onClick: () => navigate({ to: '/projects/create' }) }}
                     />
                 </div>
+            ) : visibleProjects.length === 0 ? (
+                <div className="surface px-4 py-12 text-center text-sm text-gray-500">
+                    No {typeFilter} projects yet.{' '}
+                    <Link to="/projects/create" className="font-medium text-blue-600 hover:text-blue-700">
+                        Create one
+                    </Link>
+                </div>
             ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-                    {projects.map((project: Project) => (
+                    {visibleProjects.map((project: Project) => (
                         <ProjectCard key={project.id} project={project} />
                     ))}
                 </div>
@@ -222,7 +257,8 @@ function ProjectCard({ project }: { project: Project }) {
                 )}
                 <div className="min-w-0 flex-1">
                     <h3 className="truncate font-semibold text-gray-900 group-hover:text-blue-700">{project.name}</h3>
-                    <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500">
+                    <p className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                        <ProjectTypeBadge type={project.type} />
                         <Calendar className="h-3 w-3" />
                         {new Date(project.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </p>

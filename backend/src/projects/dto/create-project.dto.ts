@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsInt, Min, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, IsArray, IsEnum } from 'class-validator';
+import { ProjectType } from '../../entities/project.entity';
 
 export class CreateProjectDto {
     @IsString()
@@ -11,8 +12,15 @@ export class CreateProjectDto {
     @IsOptional()
     description?: string;
 
+    // 'mass' (default): CSV import + templates. 'manual': articles written one by one.
+    @IsOptional()
+    @IsEnum(ProjectType)
+    type?: ProjectType;
+
+    // Required for mass projects, ignored for manual projects
     @IsString()
-    template: string;
+    @IsOptional()
+    template?: string;
 
     @IsString()
     @IsOptional()

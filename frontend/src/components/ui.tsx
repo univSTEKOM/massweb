@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Layers, PenLine } from 'lucide-react'
 import type { ReactNode } from 'react'
-import type { PublishStatus } from '../lib/api'
+import type { ProjectType, PublishStatus } from '../lib/api'
 
 /* ------------------------------------------------------------------ */
 /* Status badge                                                        */
@@ -148,4 +148,19 @@ export function BulkActionBar({ count, onClear, children }: { count: number; onC
 
 export function formatNumber(value: number | undefined) {
     return (value ?? 0).toLocaleString('en-US')
+}
+
+/* ------------------------------------------------------------------ */
+/* Project type badge                                                  */
+/* ------------------------------------------------------------------ */
+export function ProjectTypeBadge({ type }: { type?: ProjectType }) {
+    const manual = type === 'manual'
+    return (
+        <span
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${manual ? 'bg-violet-50 text-violet-700 ring-violet-200' : 'bg-blue-50 text-blue-700 ring-blue-200'}`}
+        >
+            {manual ? <PenLine className="h-3 w-3" /> : <Layers className="h-3 w-3" />}
+            {manual ? 'Manual' : 'Mass'}
+        </span>
+    )
 }
